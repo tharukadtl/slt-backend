@@ -1,4 +1,4 @@
-package lk.slt.fieldops.branch.dto;
+package lk.slt.fieldops.dto;
 
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -49,6 +49,7 @@ public class BranchDTO {
     public String getCity()             { return city; }
     public String getDistrict()         { return district; }
     public String getProvince()         { return province; }
+    public String getRegion()           { return province; }
     public String getPostalCode()       { return postalCode; }
     public String getPhone()            { return phone; }
     public String getEmail()            { return email; }

@@ -1,9 +1,14 @@
-package lk.slt.fieldops.notification.service;
+package lk.slt.fieldops.service;
 
-import lk.slt.fieldops.notification.dto.NotificationCountDTO;
-import lk.slt.fieldops.notification.dto.NotificationDTO;
-import lk.slt.fieldops.notification.entity.Notification;
-import lk.slt.fieldops.notification.repository.NotificationRepository;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.FirebaseMessagingException;
+import com.google.firebase.messaging.Message;
+import lk.slt.fieldops.dto.NotificationCountDTO;
+import lk.slt.fieldops.dto.NotificationDTO;
+import lk.slt.fieldops.entity.Notification;
+import lk.slt.fieldops.repository.NotificationRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +52,9 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepo;
 
+    @Value("${app.firebase.enabled:false}")
+    private boolean firebaseEnabled;
+
     public NotificationService(NotificationRepository notificationRepo) {
         this.notificationRepo = notificationRepo;
     }
@@ -68,27 +76,27 @@ public class NotificationService {
             return;
         }
 
-        // TODO_FIREBASE: Uncomment after adding firebase-admin to pom.xml
-        //
-        // try {
-        //     Message message = Message.builder()
-        //         .setToken(fcmToken)
-        //         .setNotification(
-        //             com.google.firebase.messaging.Notification.builder()
-        //                 .setTitle(title)
-        //                 .setBody(body)
-        //                 .build()
-        //         )
-        //         .build();
-        //     String response = FirebaseMessaging.getInstance().send(message);
-        //     log.info("Push sent OK. FCM response: " + response);
-        // } catch (FirebaseMessagingException e) {
-        //     log.severe("Firebase push failed: " + e.getMessage());
-        // }
+        if (!firebaseEnabled || FirebaseApp.getApps().isEmpty()) {
+            log.info("[PUSH-DISABLED] token=" + fcmToken.substring(0, Math.min(8, fcmToken.length())) +
+                     "... | title=" + title);
+            return;
+        }
 
-        // Placeholder log until Firebase is configured
-        log.info("[PUSH] token=" + fcmToken.substring(0, Math.min(8, fcmToken.length())) +
-                 "... | title=" + title + " | body=" + body);
+        try {
+            Message message = Message.builder()
+                .setToken(fcmToken)
+                .setNotification(
+                    com.google.firebase.messaging.Notification.builder()
+                        .setTitle(title)
+                        .setBody(body)
+                        .build()
+                )
+                .build();
+            String response = FirebaseMessaging.getInstance().send(message);
+            log.info("Push sent OK. FCM response: " + response);
+        } catch (FirebaseMessagingException e) {
+            log.severe("Firebase push failed: " + e.getMessage());
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -172,6 +180,26 @@ public class NotificationService {
             "Job Completed",
             "Job #" + jobNumber + " has been marked as completed.",
             jobId, "JOB");
+    }
+
+    @Transactional
+    public void notifyJobRejectedToTeamLead(Long teamLeadId, String tlFcmToken,
+                                             String jobNumber, Long jobId, String reason) {
+        notifyUser(teamLeadId, tlFcmToken,
+            Notification.NotificationType.GENERAL,
+            "Job Rejected by Technician",
+            "Job #" + jobNumber + " was rejected. Reason: " + reason + ". Please reassign.",
+            jobId, "JOB");
+    }
+
+    @Transactional
+    public void notifyFaultCompletedToClient(Long customerId, String customerFcmToken,
+                                              String faultNumber, Long faultId) {
+        notifyUser(customerId, customerFcmToken,
+            Notification.NotificationType.FAULT_COMPLETED,
+            "Fault Resolved ✓",
+            "Your reported fault #" + faultNumber + " has been resolved. Thank you for your patience.",
+            faultId, "FAULT");
     }
 
     @Transactional

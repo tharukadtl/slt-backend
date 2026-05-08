@@ -1,6 +1,6 @@
-package lk.slt.fieldops.job.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.job.entity.Job;
+import lk.slt.fieldops.entity.Job;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -34,6 +34,16 @@ public interface JobRepository extends JpaRepository<Job, Long> {
            "WHERE j.sessionId = :sessionId " +
            "AND j.status IN ('PENDING','ACCEPTED','IN_PROGRESS','HOLD')")
     int returnAllJobsToTeamLead(Long sessionId);
+
+    /** Technician checkout: return this technician's open jobs to team lead pool */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Job j SET j.status = 'PENDING', " +
+           "j.technicianId = NULL, j.technicianName = NULL " +
+           "WHERE j.technicianId = :technicianId " +
+           "AND j.scheduledDate = :date " +
+           "AND j.status IN ('PENDING','ACCEPTED','IN_PROGRESS','HOLD')")
+    int returnJobsOnTechnicianCheckout(Long technicianId, LocalDate date);
 
     /** Count for job number generation */
     @Query("SELECT COUNT(j) FROM Job j WHERE YEAR(j.createdAt) = :year")

@@ -1,4 +1,4 @@
-package lk.slt.fieldops.payment.dto;
+package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import java.math.BigDecimal;

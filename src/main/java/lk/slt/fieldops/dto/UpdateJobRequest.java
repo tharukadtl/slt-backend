@@ -1,5 +1,6 @@
-package lk.slt.fieldops.job.dto;
+package lk.slt.fieldops.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -16,6 +17,7 @@ import jakarta.validation.constraints.NotBlank;
 public class UpdateJobRequest {
 
     @NotBlank(message = "New status is required")
+    @JsonAlias("status")
     private String newStatus;
 
     private String reason;             // required when status = HOLD

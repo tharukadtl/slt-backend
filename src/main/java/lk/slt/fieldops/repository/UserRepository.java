@@ -1,6 +1,6 @@
-package lk.slt.fieldops.user.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.user.entity.User;
+import lk.slt.fieldops.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -13,6 +13,11 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByUsername(String username);
 
     Optional<User> findByPhone(String phone);
+
+    Optional<User> findByPhoneNumber(String phoneNumber);
+
+    @Query("SELECT u FROM User u WHERE u.phone = :phone OR u.phoneNumber = :phone")
+    Optional<User> findByPhoneOrPhoneNumber(String phone);
 
     Optional<User> findByEmail(String email);
 

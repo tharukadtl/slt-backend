@@ -1,4 +1,4 @@
-package lk.slt.fieldops.user.dto;
+package lk.slt.fieldops.dto;
 
 import java.time.LocalDateTime;
 

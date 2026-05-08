@@ -1,9 +1,10 @@
-package lk.slt.fieldops.job.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.job.dto.*;
-import lk.slt.fieldops.job.entity.*;
-import lk.slt.fieldops.job.service.JobService;
+import lk.slt.fieldops.dto.*;
+import lk.slt.fieldops.entity.*;
+import lk.slt.fieldops.repository.UserRepository;
+import lk.slt.fieldops.service.JobService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -46,10 +47,18 @@ import java.util.Map;
 @RequestMapping("/api/jobs")
 public class JobController {
 
-    private final JobService jobService;
+    private final JobService     jobService;
+    private final UserRepository userRepo;
 
-    public JobController(JobService jobService) {
+    public JobController(JobService jobService, UserRepository userRepo) {
         this.jobService = jobService;
+        this.userRepo   = userRepo;
+    }
+
+    private String resolveFullName(Long userId) {
+        return userRepo.findById(userId)
+            .map(User::getFullName)
+            .orElse("User #" + userId);
     }
 
     // ── 1. Team Lead does BOD ─────────────────────────────────────────────────
@@ -64,7 +73,7 @@ public class JobController {
             @Valid @RequestBody BodRequest request,
             @AuthenticationPrincipal Long userId) {
 
-        String teamLeadName = "Team Lead #" + userId;  // TODO Phase 3: load from User
+        String teamLeadName = resolveFullName(userId);  // TODO Phase 3: load from User
         DaySession session = jobService.performBod(request, userId, teamLeadName);
         return ResponseEntity.status(HttpStatus.CREATED).body(session);
     }
@@ -80,7 +89,7 @@ public class JobController {
             @Valid @RequestBody EodRequest request,
             @AuthenticationPrincipal Long userId) {
 
-        String teamLeadName = "Team Lead #" + userId;
+        String teamLeadName = resolveFullName(userId);
         Map<String, Object> result = jobService.performEod(request, userId, teamLeadName);
         return ResponseEntity.ok(result);
     }
@@ -103,6 +112,13 @@ public class JobController {
         return ResponseEntity.ok(jobService.getSessionMembers(sessionId));
     }
 
+    // ── Admin: get ALL jobs ───────────────────────────────────────────────────
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<Job>> getAllJobs() {
+        return ResponseEntity.ok(jobService.getAllJobs());
+    }
+
     // ── 5. Create job (Team Lead assigns fault to Technician) ─────────────────
     /**
      * POST /api/jobs
@@ -114,7 +130,7 @@ public class JobController {
             @Valid @RequestBody CreateJobRequest request,
             @AuthenticationPrincipal Long userId) {
 
-        String teamLeadName = "Team Lead #" + userId;
+        String teamLeadName = resolveFullName(userId);
         Job created = jobService.createJob(request, userId, teamLeadName);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
@@ -164,15 +180,16 @@ public class JobController {
     // ── 10. Reassign job to another Technician ────────────────────────────────
     @PostMapping("/{id}/reassign")
     @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN')")
-    public ResponseEntity<Map<String, String>> reassign(
+    public ResponseEntity<Job> reassign(
             @PathVariable Long id,
             @RequestBody Map<String, Long> body,
             @AuthenticationPrincipal Long userId) {
 
-        // TODO: Implement reassignment in JobService
-        return ResponseEntity.ok(Map.of(
-            "message", "Job reassignment — TODO implement in next iteration"
-        ));
+        Long newTechnicianId = body.get("newTechnicianId");
+        if (newTechnicianId == null) {
+            throw new RuntimeException("newTechnicianId is required in the request body.");
+        }
+        return ResponseEntity.ok(jobService.reassignJob(id, newTechnicianId, userId));
     }
 
     // ── 11. Log material usage ────────────────────────────────────────────────
@@ -223,11 +240,16 @@ public class JobController {
     public ResponseEntity<List<CheckInOut>> getCheckInOut(
             @PathVariable Long sessionId) {
 
-        return ResponseEntity.ok(
-            jobService.getSessionMembers(sessionId).isEmpty()
-                ? List.of()
-                : List.of()  // TODO: return from checkInOutRepo via service method
-        );
+        return ResponseEntity.ok(jobService.getCheckInOutForSession(sessionId));
+    }
+
+    // ── 14b. Technician checkout status for EOD screen ───────────────────────
+    @GetMapping("/session/{sessionId}/technician-status")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<lk.slt.fieldops.dto.TechnicianCheckoutStatusDTO>> getTechnicianCheckoutStatus(
+            @PathVariable Long sessionId) {
+
+        return ResponseEntity.ok(jobService.getTechnicianCheckoutStatus(sessionId));
     }
 
     // ── 15. Team Lead dashboard summary ──────────────────────────────────────
@@ -269,5 +291,20 @@ public class JobController {
         req.setNewStatus("CANCELLED");
         req.setReason("Cancelled by Team Lead");
         return ResponseEntity.ok(jobService.updateJobStatus(id, req, userId));
+    }
+
+    // ── 17. Store completion signature ────────────────────────────────────────
+    @PostMapping("/{id}/signature")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN')")
+    public ResponseEntity<Job> submitSignature(
+            @PathVariable Long id,
+            @RequestBody Map<String, String> body,
+            @AuthenticationPrincipal Long userId) {
+
+        String signature = body.get("signature");
+        if (signature == null || signature.isBlank()) {
+            throw new RuntimeException("signature is required in the request body.");
+        }
+        return ResponseEntity.ok(jobService.submitSignature(id, signature, userId));
     }
 }

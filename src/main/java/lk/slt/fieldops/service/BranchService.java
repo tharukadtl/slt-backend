@@ -1,9 +1,9 @@
-package lk.slt.fieldops.branch.service;
+package lk.slt.fieldops.service;
 
-import lk.slt.fieldops.branch.dto.BranchDTO;
-import lk.slt.fieldops.branch.dto.CreateBranchRequest;
-import lk.slt.fieldops.branch.entity.Branch;
-import lk.slt.fieldops.branch.repository.BranchRepository;
+import lk.slt.fieldops.dto.BranchDTO;
+import lk.slt.fieldops.dto.CreateBranchRequest;
+import lk.slt.fieldops.entity.Branch;
+import lk.slt.fieldops.repository.BranchRepository;
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,14 +47,13 @@ public class BranchService {
      */
     @Transactional
     public BranchDTO create(CreateBranchRequest request, Long createdByUserId) {
-        // Check if the code already exists
-        if (branchRepository.existsByCode(request.getCode())) {
-            throw new RuntimeException(
-                "Branch code '" + request.getCode() + "' already exists. Each branch must have a unique code.");
-        }
-
         Branch branch = new Branch();
         mapRequestToEntity(request, branch);
+
+        if (branchRepository.existsByCode(branch.getCode())) {
+            throw new RuntimeException(
+                "Branch code '" + branch.getCode() + "' already exists. Please choose a different code.");
+        }
         branch.setCreatedBy(createdByUserId);
 
         Branch saved = branchRepository.save(branch);
@@ -71,13 +70,10 @@ public class BranchService {
     public BranchDTO update(Long id, CreateBranchRequest request) {
         Branch branch = findOrThrow(id);
 
-        // Don't allow code to change
-        if (!branch.getCode().equals(request.getCode())) {
-            throw new RuntimeException(
-                "Branch code cannot be changed after creation. Current code: " + branch.getCode());
-        }
-
+        // Preserve existing code — don't allow code to change
+        String savedCode = branch.getCode();
         mapRequestToEntity(request, branch);
+        branch.setCode(savedCode);
         Branch saved = branchRepository.save(branch);
         return mapToDTO(saved);
     }
@@ -153,11 +149,21 @@ public class BranchService {
      */
     private void mapRequestToEntity(CreateBranchRequest req, Branch branch) {
         branch.setName(req.getName());
-        branch.setCode(req.getCode());
-        branch.setAddress(req.getAddress());
+
+        String code = req.getCode();
+        if (code == null || code.isBlank()) {
+            String prefix = req.getName().replaceAll("[^A-Za-z]", "").toUpperCase();
+            prefix = prefix.length() >= 3 ? prefix.substring(0, 3) : (prefix + "BRN").substring(0, 3);
+            code = prefix + "-" + String.format("%02d", (int)(Math.random() * 90) + 10);
+        }
+        branch.setCode(code);
+
+        branch.setAddress(req.getAddress() != null && !req.getAddress().isBlank()
+                ? req.getAddress() : "-");
         branch.setCity(req.getCity());
         branch.setDistrict(req.getDistrict());
-        branch.setProvince(req.getProvince());
+        String province = req.getProvince() != null ? req.getProvince() : req.getRegion();
+        branch.setProvince(province);
         branch.setPostalCode(req.getPostalCode());
         branch.setPhone(req.getPhone());
         branch.setEmail(req.getEmail());
@@ -176,15 +182,15 @@ public class BranchService {
             branch.setWorkingHoursEnd(LocalTime.parse(req.getWorkingHoursEnd()));
         }
 
-        // Parse branchType string to enum
-        if (req.getBranchType() != null) {
+        // Parse branchType string to enum — default LOCAL_BRANCH
+        if (req.getBranchType() != null && !req.getBranchType().isBlank()) {
             try {
                 branch.setBranchType(Branch.BranchType.valueOf(req.getBranchType()));
             } catch (IllegalArgumentException e) {
-                throw new RuntimeException(
-                    "Invalid branch type: " + req.getBranchType() +
-                    ". Valid values: REGIONAL_OFFICE, DISTRICT_CENTER, LOCAL_BRANCH");
+                branch.setBranchType(Branch.BranchType.LOCAL_BRANCH);
             }
+        } else if (branch.getBranchType() == null) {
+            branch.setBranchType(Branch.BranchType.LOCAL_BRANCH);
         }
     }
 

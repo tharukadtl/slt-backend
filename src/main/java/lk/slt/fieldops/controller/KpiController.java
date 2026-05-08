@@ -1,113 +1,85 @@
-package lk.slt.fieldops.kpi.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.kpi.dto.KpiScoreDTO;
-import lk.slt.fieldops.kpi.dto.KpiSummaryDTO;
-import lk.slt.fieldops.kpi.dto.KpiTargetRequest;
-import lk.slt.fieldops.kpi.entity.KpiTarget;
-import lk.slt.fieldops.kpi.service.KpiService;
-import org.springframework.format.annotation.DateTimeFormat;
+import lk.slt.fieldops.dto.KpiDTO;
+import lk.slt.fieldops.service.KpiCalculationService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
-/**
- * KpiController — KPI dashboard endpoints.
- *
- * GET   /api/kpi/leaderboard                      Today's technician rankings
- * GET   /api/kpi/my                               My own KPI scores (Technician)
- * GET   /api/kpi/technician/{id}                  Admin: specific technician
- * GET   /api/kpi/technician/{id}/summary          Aggregated summary with period
- * GET   /api/kpi/branch/{id}                      Branch performance on a date
- * POST  /api/kpi/calculate                        Manually trigger nightly calc
- * POST  /api/kpi/targets                          Admin: set targets
- */
+@Slf4j
 @RestController
 @RequestMapping("/api/kpi")
+@RequiredArgsConstructor
 public class KpiController {
 
-    private final KpiService kpiService;
+    private final KpiCalculationService kpiCalculationService;
 
-    public KpiController(KpiService kpiService) {
-        this.kpiService = kpiService;
-    }
-
-    // ── Leaderboard ───────────────────────────────────────────────────────────
-    @GetMapping("/leaderboard")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
-    public ResponseEntity<List<KpiScoreDTO>> getLeaderboard(
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return ResponseEntity.ok(kpiService.getLeaderboard(date));
-    }
-
-    // ── Technician: my own scores ─────────────────────────────────────────────
-    @GetMapping("/my")
-    @PreAuthorize("hasRole('TECHNICIAN')")
-    public ResponseEntity<List<KpiScoreDTO>> getMy(
+    @GetMapping("/my-score")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<KpiDTO.PersonalKpiDTO> getMyScore(
+            @RequestParam(defaultValue = "MONTHLY") String period,
             @AuthenticationPrincipal Long userId) {
-        return ResponseEntity.ok(kpiService.getScoresForTechnician(userId));
+        log.info("GET /api/kpi/my-score userId={}, period={}", userId, period);
+        return ResponseEntity.ok(kpiCalculationService.getPersonalKpi(userId, period));
     }
 
-    // ── Admin: specific technician scores ─────────────────────────────────────
-    @GetMapping("/technician/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
-    public ResponseEntity<List<KpiScoreDTO>> getTechnicianScores(
-            @PathVariable Long id,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-
-        if (from != null && to != null) {
-            return ResponseEntity.ok(kpiService.getScoresInRange(id, from, to));
-        }
-        return ResponseEntity.ok(kpiService.getScoresForTechnician(id));
+    @GetMapping("/score/{userId}")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<KpiDTO.PersonalKpiDTO> getTechnicianScore(
+            @PathVariable Long userId,
+            @RequestParam(defaultValue = "MONTHLY") String period) {
+        log.info("GET /api/kpi/score/{} period={}", userId, period);
+        return ResponseEntity.ok(kpiCalculationService.getPersonalKpi(userId, period));
     }
 
-    // ── Aggregated summary for a technician ───────────────────────────────────
-    @GetMapping("/technician/{id}/summary")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
-    public ResponseEntity<KpiSummaryDTO> getTechnicianSummary(
-            @PathVariable Long id,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-
-        LocalDate f = from != null ? from : LocalDate.now().withDayOfMonth(1);
-        LocalDate t = to   != null ? to   : LocalDate.now();
-        return ResponseEntity.ok(kpiService.getSummary(id, f, t));
+    @GetMapping("/team")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<KpiDTO.TeamKpiDTO> getTeamKpi(
+            @RequestParam(defaultValue = "MONTHLY") String period,
+            @RequestParam(defaultValue = "1") Long branchId) {
+        log.info("GET /api/kpi/team period={}, branchId={}", period, branchId);
+        return ResponseEntity.ok(kpiCalculationService.getTeamKpi(branchId, period));
     }
 
-    // ── Branch performance ────────────────────────────────────────────────────
-    @GetMapping("/branch/{branchId}")
+    @GetMapping("/targets/my-targets")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<KpiDTO.TargetResponseDTO>> getMyTargets(
+            @RequestParam(required = false) String period,
+            @AuthenticationPrincipal Long userId) {
+        log.info("GET /api/kpi/targets/my-targets userId={}, period={}", userId, period);
+        return ResponseEntity.ok(kpiCalculationService.getMyTargets(userId, period));
+    }
+
+    @PostMapping("/targets/assign")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<KpiScoreDTO>> getBranchScores(
-            @PathVariable Long branchId,
-            @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        LocalDate target = date != null ? date : LocalDate.now().minusDays(1);
-        return ResponseEntity.ok(kpiService.getBranchScores(branchId, target));
+    public ResponseEntity<KpiDTO.TargetResponseDTO> assignTarget(
+            @Valid @RequestBody KpiDTO.AssignTargetRequest request,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/kpi/targets/assign adminId={}, technicianId={}",
+                userId, request.getTechnicianId());
+        return ResponseEntity.ok(kpiCalculationService.assignTarget(userId, request));
     }
 
-    // ── Manually trigger nightly calculation ──────────────────────────────────
-    @PostMapping("/calculate")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<Map<String, String>> triggerCalculation() {
-        kpiService.calculateDailyKpis();
-        return ResponseEntity.ok(Map.of(
-            "message", "KPI calculation triggered for yesterday.",
-            "date",    LocalDate.now().minusDays(1).toString()
-        ));
+    @GetMapping("/targets/technician/{id}")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<KpiDTO.TargetResponseDTO>> getTechnicianTargets(
+            @PathVariable Long id) {
+        log.info("GET /api/kpi/targets/technician/{}", id);
+        return ResponseEntity.ok(kpiCalculationService.getTechnicianTargets(id));
     }
 
-    // ── Set KPI targets (Admin) ───────────────────────────────────────────────
-    @PostMapping("/targets")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<KpiTarget> setTarget(
-            @Valid @RequestBody KpiTargetRequest request) {
-        return ResponseEntity.ok(kpiService.setTarget(request));
+    @GetMapping("/leaderboard")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<KpiDTO.LeaderboardEntryDTO>> getLeaderboard(
+            @RequestParam(defaultValue = "MONTHLY") String period,
+            @AuthenticationPrincipal Long userId) {
+        log.info("GET /api/kpi/leaderboard period={}", period);
+        return ResponseEntity.ok(kpiCalculationService.getLeaderboard(period, userId));
     }
 }

@@ -1,5 +1,6 @@
-package lk.slt.fieldops.job.dto;
+package lk.slt.fieldops.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
@@ -20,6 +21,7 @@ public class MaterialUsageRequest {
     private Long materialId;
 
     @NotNull(message = "Quantity is required")
+    @JsonAlias("quantity")
     private BigDecimal quantityUsed;
 
     private String chargeType = "FOC";   // FOC or CHARGEABLE

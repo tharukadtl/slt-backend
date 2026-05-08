@@ -1,9 +1,9 @@
-package lk.slt.fieldops.branch.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.branch.dto.BranchDTO;
-import lk.slt.fieldops.branch.dto.CreateBranchRequest;
-import lk.slt.fieldops.branch.service.BranchService;
+import lk.slt.fieldops.dto.BranchDTO;
+import lk.slt.fieldops.dto.CreateBranchRequest;
+import lk.slt.fieldops.service.BranchService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -75,7 +75,7 @@ public class BranchController {
      * @AuthenticationPrincipal Long userId — gets the logged-in user's ID from JWT
      */
     @PostMapping
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
     public ResponseEntity<BranchDTO> create(
             @Valid @RequestBody CreateBranchRequest request,
             @AuthenticationPrincipal Long userId) {
@@ -128,7 +128,7 @@ public class BranchController {
      * Note: branch code cannot be changed.
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
     public ResponseEntity<BranchDTO> update(
             @PathVariable Long id,
             @Valid @RequestBody CreateBranchRequest request) {
@@ -141,7 +141,7 @@ public class BranchController {
      * Activate a branch (sets status = ACTIVE).
      */
     @PatchMapping("/{id}/activate")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
     public ResponseEntity<BranchDTO> activate(@PathVariable Long id) {
         return ResponseEntity.ok(branchService.activate(id));
     }
@@ -151,7 +151,7 @@ public class BranchController {
      * Deactivate a branch (sets status = INACTIVE).
      */
     @PatchMapping("/{id}/deactivate")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
     public ResponseEntity<BranchDTO> deactivate(@PathVariable Long id) {
         return ResponseEntity.ok(branchService.deactivate(id));
     }
@@ -175,7 +175,7 @@ public class BranchController {
      * This endpoint returns a clear message explaining why.
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
     public ResponseEntity<Map<String, String>> delete(@PathVariable Long id) {
         // Deactivate instead of delete — preserves data integrity
         branchService.deactivate(id);

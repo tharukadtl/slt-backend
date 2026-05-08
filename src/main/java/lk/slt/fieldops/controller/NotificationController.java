@@ -1,11 +1,11 @@
-package lk.slt.fieldops.notification.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.notification.dto.NotificationCountDTO;
-import lk.slt.fieldops.notification.dto.NotificationDTO;
-import lk.slt.fieldops.notification.dto.SendPushRequest;
-import lk.slt.fieldops.notification.entity.Notification;
-import lk.slt.fieldops.notification.service.NotificationService;
+import lk.slt.fieldops.dto.NotificationCountDTO;
+import lk.slt.fieldops.dto.NotificationDTO;
+import lk.slt.fieldops.dto.SendPushRequest;
+import lk.slt.fieldops.entity.Notification;
+import lk.slt.fieldops.service.NotificationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;

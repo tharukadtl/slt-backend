@@ -1,6 +1,6 @@
-package lk.slt.fieldops.job.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.job.entity.MaterialUsage;
+import lk.slt.fieldops.entity.MaterialUsage;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.List;

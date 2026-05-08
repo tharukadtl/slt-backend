@@ -1,4 +1,4 @@
-package lk.slt.fieldops.notification.dto;
+package lk.slt.fieldops.dto;
 
 /**
  * NotificationCountDTO — returned by GET /api/notifications/count

@@ -1,12 +1,12 @@
-package lk.slt.fieldops.user.service;
+package lk.slt.fieldops.service;
 
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
-import lk.slt.fieldops.user.dto.ChangePasswordRequest;
-import lk.slt.fieldops.user.dto.CreateUserRequest;
-import lk.slt.fieldops.user.dto.UpdateUserRequest;
-import lk.slt.fieldops.user.dto.UserDTO;
-import lk.slt.fieldops.user.entity.User;
-import lk.slt.fieldops.user.repository.UserRepository;
+import lk.slt.fieldops.dto.ChangePasswordRequest;
+import lk.slt.fieldops.dto.CreateUserRequest;
+import lk.slt.fieldops.dto.UpdateUserRequest;
+import lk.slt.fieldops.dto.UserDTO;
+import lk.slt.fieldops.entity.User;
+import lk.slt.fieldops.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,9 +42,18 @@ public class UserService {
         User user = new User();
         user.setUsername(req.getUsername());
         user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
-        user.setFullName(req.getFullName());
-        user.setEmail(req.getEmail());
-        user.setPhone(req.getPhone());
+        String full = req.getFullName() != null ? req.getFullName().trim() : "";
+        user.setFullName(full);
+        int sp = full.indexOf(' ');
+        if (sp > 0) {
+            user.setFirstName(full.substring(0, sp));
+            user.setLastName(full.substring(sp + 1).trim());
+        } else {
+            user.setFirstName(full.isEmpty() ? "User" : full);
+            user.setLastName(full.isEmpty() ? "User" : full);
+        }
+        user.setEmail(blankToNull(req.getEmail()));
+        user.setPhone(blankToNull(req.getPhone()));
         user.setRole(role);
         user.setBranchId(req.getBranchId());
         user.setIsActive(true);
@@ -57,8 +66,8 @@ public class UserService {
         User user = findOrThrow(id);
 
         user.setFullName(req.getFullName());
-        user.setEmail(req.getEmail());
-        user.setPhone(req.getPhone());
+        user.setEmail(blankToNull(req.getEmail()));
+        user.setPhone(blankToNull(req.getPhone()));
 
         if (req.getRole() != null) {
             try {
@@ -139,11 +148,59 @@ public class UserService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public List<UserDTO> getByRoleAndBranch(String roleStr, Long branchId) {
+        try {
+            User.Role role = User.Role.valueOf(roleStr.toUpperCase());
+            return userRepo.findByBranchIdAndRole(branchId, role).stream()
+                .map(this::mapToDTO).collect(Collectors.toList());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid role: " + roleStr);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserDTO> getActiveByRoleAndBranch(String roleStr, Long branchId) {
+        try {
+            User.Role role = User.Role.valueOf(roleStr.toUpperCase());
+            return userRepo.findActiveByRoleAndBranch(role, branchId).stream()
+                .map(this::mapToDTO).collect(Collectors.toList());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid role: " + roleStr);
+        }
+    }
+
+    @Transactional
+    public UserDTO updateProfile(Long userId, java.util.Map<String, Object> req) {
+        User user = findOrThrow(userId);
+
+        Object fullName = req.get("fullName");
+        if (fullName instanceof String s && !s.isBlank()) {
+            user.setFullName(s.trim());
+        }
+
+        Object email = req.get("email");
+        if (email instanceof String s) {
+            user.setEmail(s.isBlank() ? null : s.trim());
+        }
+
+        Object language = req.get("language");
+        if (language instanceof String s && !s.isBlank()) {
+            try {
+                user.setPreferredLanguage(User.Language.valueOf(s.toUpperCase()));
+            } catch (IllegalArgumentException ignored) {}
+        }
+
+        return mapToDTO(userRepo.save(user));
+    }
+
     @Transactional
     public void updateLastLogin(Long userId) {
-        User user = findOrThrow(userId);
-        user.setLastLogin(LocalDateTime.now());
-        userRepo.save(user);
+        if (userId == null) return;
+        userRepo.findById(userId).ifPresent(user -> {
+            user.setLastLogin(LocalDateTime.now());
+            userRepo.save(user);
+        });
     }
 
     @Transactional
@@ -151,6 +208,10 @@ public class UserService {
         User user = findOrThrow(userId);
         user.setFcmToken(fcmToken);
         userRepo.save(user);
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     private User findOrThrow(Long id) {

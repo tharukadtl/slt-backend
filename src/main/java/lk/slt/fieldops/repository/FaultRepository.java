@@ -1,44 +1,122 @@
-package lk.slt.fieldops.fault.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.fault.entity.Fault;
+import lk.slt.fieldops.entity.Fault;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
-public interface FaultRepository extends JpaRepository<Fault, Long> {
+public interface FaultRepository
+        extends JpaRepository<Fault, Long> {
 
-    Optional<Fault> findByFaultNumber(String faultNumber);
+    // ─── Find by Status ───────────────────────────────────
 
-    /** All faults for a branch — Admin dashboard */
-    List<Fault> findByBranchIdOrderByReportedAtDesc(Long branchId);
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.status = :status "
+            + "ORDER BY f.createdAt DESC")
+    List<Fault> findByStatus(
+            @Param("status") Fault.FaultStatus status);
 
-    /** Filter by status — e.g. get all REPORTED faults */
+    // ─── Find by Branch + Status (ordered by priority then reported) ──
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.branchId = :branchId "
+            + "AND f.status = :status "
+            + "ORDER BY f.priority ASC, f.reportedAt ASC")
     List<Fault> findByBranchIdAndStatusOrderByPriorityAscReportedAtAsc(
-            Long branchId, Fault.FaultStatus status);
+            @Param("branchId") Long branchId,
+            @Param("status") Fault.FaultStatus status);
 
-    /** All faults for a customer — Client mobile app */
-    List<Fault> findByCustomerIdOrderByReportedAtDesc(Long customerId);
+    // ─── Find by Branch ───────────────────────────────────
 
-    /** All faults assigned to a Team Lead */
-    List<Fault> findByAssignedTeamLeadIdAndStatusIn(
-            Long teamLeadId, List<Fault.FaultStatus> statuses);
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.branchId = :branchId "
+            + "ORDER BY f.reportedAt DESC")
+    List<Fault> findByBranchIdOrderByReportedAtDesc(
+            @Param("branchId") Long branchId);
 
-    /** Overdue faults — alert dashboard */
-    List<Fault> findByIsOverdueTrueAndStatusNotIn(List<Fault.FaultStatus> excludeStatuses);
+    // ─── Find by Customer ─────────────────────────────────
 
-    /** All open faults across all branches — Super Admin */
-    @Query("SELECT f FROM Fault f WHERE f.status NOT IN ('COMPLETED','CANCELLED') ORDER BY f.priority ASC, f.reportedAt ASC")
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.customerId = :customerId "
+            + "ORDER BY f.reportedAt DESC")
+    List<Fault> findByCustomerIdOrderByReportedAtDesc(
+            @Param("customerId") Long customerId);
+
+    // ─── Find by Assigned Team Lead ───────────────────────
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.assignedTeamLeadId = :teamLeadId "
+            + "ORDER BY f.createdAt DESC")
+    List<Fault> findByAssignedTechnicianId(
+            @Param("teamLeadId") Long teamLeadId);
+
+    // ─── Find Unassigned ──────────────────────────────────
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.assignedTeamLeadId IS NULL "
+            + "AND f.status NOT IN "
+            + "('COMPLETED', 'CANCELLED') "
+            + "ORDER BY f.createdAt DESC")
+    List<Fault> findUnassigned();
+
+    // ─── Find All Open ────────────────────────────────────
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.status NOT IN "
+            + "('COMPLETED', 'CANCELLED') "
+            + "ORDER BY f.createdAt ASC")
+    List<Fault> findAllOpen();
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.status NOT IN "
+            + "('COMPLETED', 'CANCELLED') "
+            + "ORDER BY f.createdAt ASC")
     List<Fault> findAllOpenFaults();
 
-    /** Count open faults per branch — dashboard widget */
-    @Query("SELECT COUNT(f) FROM Fault f WHERE f.branchId = :branchId AND f.status NOT IN ('COMPLETED','CANCELLED')")
-    long countOpenFaultsByBranch(Long branchId);
+    // ─── Find by Date Range ───────────────────────────────
 
-    /** Generate next fault number — e.g. FLT-2026-00042 */
-    @Query("SELECT COUNT(f) FROM Fault f WHERE YEAR(f.reportedAt) = :year")
-    long countFaultsByYear(int year);
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.createdAt BETWEEN "
+            + ":startDate AND :endDate "
+            + "ORDER BY f.createdAt DESC")
+    List<Fault> findByDateRange(
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate")   LocalDateTime endDate);
+
+    // ─── Count by Status ──────────────────────────────────
+
+    @Query("SELECT COUNT(f) FROM Fault f "
+            + "WHERE f.status = :status")
+    long countByStatus(
+            @Param("status") Fault.FaultStatus status);
+
+    // ─── Find by Priority ─────────────────────────────────
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.priority = :priority "
+            + "AND f.status NOT IN "
+            + "('COMPLETED', 'CANCELLED') "
+            + "ORDER BY f.createdAt ASC")
+    List<Fault> findByPriority(
+            @Param("priority") Fault.FaultPriority priority);
+
+    // ─── Count by Year ────────────────────────────────────
+
+    @Query("SELECT COUNT(f) FROM Fault f "
+            + "WHERE YEAR(f.createdAt) = :year")
+    long countFaultsByYear(@Param("year") int year);
+
+    // ─── Find High Priority Open ──────────────────────────
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.priority = 'HIGH' "
+            + "AND f.status NOT IN "
+            + "('COMPLETED', 'CANCELLED') "
+            + "ORDER BY f.createdAt ASC")
+    List<Fault> findHighPriorityOpen();
 }

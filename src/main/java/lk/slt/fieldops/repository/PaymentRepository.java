@@ -1,6 +1,6 @@
-package lk.slt.fieldops.payment.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.payment.entity.Payment;
+import lk.slt.fieldops.entity.Payment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -25,6 +25,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     @Query("SELECT COUNT(p) FROM Payment p WHERE YEAR(p.createdAt) = :year")
     long countByYear(int year);
 
-    @Query("SELECT COUNT(p) FROM Payment p WHERE YEAR(p.approvedAt) = :year AND MONTH(p.approvedAt) = :month AND p.status = 'BILLED'")
+    @Query("SELECT COUNT(p) FROM Payment p WHERE YEAR(p.approvedAt) = :year AND MONTH(p.approvedAt) = :month AND p.status = 'FINAL'")
     long countBilledByYearMonth(int year, int month);
 }

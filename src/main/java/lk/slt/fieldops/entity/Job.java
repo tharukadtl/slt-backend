@@ -1,4 +1,4 @@
-package lk.slt.fieldops.job.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -20,7 +20,7 @@ import java.time.LocalDateTime;
 @Table(name = "jobs")
 public class Job {
 
-    public enum JobStatus { PENDING, ACCEPTED, IN_PROGRESS, HOLD, COMPLETED, CANCELLED }
+    public enum JobStatus { PENDING, ACCEPTED, IN_PROGRESS, HOLD, COMPLETED, CANCELLED, REJECTED }
     public enum JobPriority { HIGH, MEDIUM, LOW }
 
     @Id
@@ -95,6 +95,12 @@ public class Job {
     @Column(name = "hold_reason", length = 500)
     private String holdReason;
 
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
+    @Column(name = "rejected_by_role", length = 30)
+    private String rejectedByRole;
+
     @Column(name = "scheduled_date")
     private LocalDate scheduledDate;
 
@@ -121,6 +127,9 @@ public class Job {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "completion_signature", columnDefinition = "TEXT")
+    private String completionSignature;
 
     @Column(name = "created_by")
     private Long createdBy;
@@ -163,7 +172,9 @@ public class Job {
     public String      getCauseOfFault()    { return causeOfFault; }
     public String      getWorkNotes()       { return workNotes; }
     public String      getCompletionRemarks(){ return completionRemarks; }
-    public String      getHoldReason()      { return holdReason; }
+    public String      getHoldReason()       { return holdReason; }
+    public String      getRejectionReason() { return rejectionReason; }
+    public String      getRejectedByRole()  { return rejectedByRole; }
     public LocalDate   getScheduledDate()   { return scheduledDate; }
     public LocalDateTime getAcceptedAt()    { return acceptedAt; }
     public LocalDateTime getStartedAt()     { return startedAt; }
@@ -173,6 +184,7 @@ public class Job {
     public BigDecimal  getLaborHours()      { return laborHours; }
     public LocalDateTime getCreatedAt()     { return createdAt; }
     public LocalDateTime getUpdatedAt()     { return updatedAt; }
+    public String      getCompletionSignature() { return completionSignature; }
     public Long        getCreatedBy()       { return createdBy; }
     public Long        getUpdatedBy()       { return updatedBy; }
 
@@ -199,7 +211,9 @@ public class Job {
     public void setCauseOfFault(String v)        { this.causeOfFault    = v; }
     public void setWorkNotes(String v)           { this.workNotes       = v; }
     public void setCompletionRemarks(String v)   { this.completionRemarks = v; }
-    public void setHoldReason(String v)          { this.holdReason      = v; }
+    public void setHoldReason(String v)           { this.holdReason       = v; }
+    public void setRejectionReason(String v)      { this.rejectionReason  = v; }
+    public void setRejectedByRole(String v)       { this.rejectedByRole   = v; }
     public void setScheduledDate(LocalDate v)    { this.scheduledDate   = v; }
     public void setAcceptedAt(LocalDateTime v)   { this.acceptedAt      = v; }
     public void setStartedAt(LocalDateTime v)    { this.startedAt       = v; }
@@ -207,6 +221,7 @@ public class Job {
     public void setCompletedAt(LocalDateTime v)  { this.completedAt     = v; }
     public void setIsBillable(Boolean v)         { this.isBillable      = v; }
     public void setLaborHours(BigDecimal v)      { this.laborHours      = v; }
+    public void setCompletionSignature(String v) { this.completionSignature = v; }
     public void setCreatedBy(Long v)             { this.createdBy       = v; }
     public void setUpdatedBy(Long v)             { this.updatedBy       = v; }
 }

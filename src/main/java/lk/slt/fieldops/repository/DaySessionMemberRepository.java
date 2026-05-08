@@ -1,6 +1,6 @@
-package lk.slt.fieldops.job.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.job.entity.DaySessionMember;
+import lk.slt.fieldops.entity.DaySessionMember;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

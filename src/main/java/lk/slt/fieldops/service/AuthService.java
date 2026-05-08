@@ -1,16 +1,17 @@
-package lk.slt.fieldops.auth.service;
+package lk.slt.fieldops.service;
 
-import lk.slt.fieldops.auth.dto.AuthResponse;
-import lk.slt.fieldops.auth.dto.OtpVerifyRequest;
-import lk.slt.fieldops.auth.dto.PasswordLoginRequest;
-import lk.slt.fieldops.auth.entity.OtpRecord;
-import lk.slt.fieldops.auth.entity.RefreshToken;
-import lk.slt.fieldops.auth.repository.OtpRecordRepository;
-import lk.slt.fieldops.auth.repository.RefreshTokenRepository;
+import lk.slt.fieldops.dto.AuthResponse;
+import lk.slt.fieldops.dto.ClientRegisterRequest;
+import lk.slt.fieldops.dto.OtpVerifyRequest;
+import lk.slt.fieldops.dto.PasswordLoginRequest;
+import lk.slt.fieldops.entity.OtpRecord;
+import lk.slt.fieldops.entity.RefreshToken;
+import lk.slt.fieldops.repository.OtpRecordRepository;
+import lk.slt.fieldops.repository.RefreshTokenRepository;
 import lk.slt.fieldops.config.JwtTokenProvider;
-import lk.slt.fieldops.user.entity.User;
-import lk.slt.fieldops.user.repository.UserRepository;
-import lk.slt.fieldops.user.service.UserService;
+import lk.slt.fieldops.entity.User;
+import lk.slt.fieldops.repository.UserRepository;
+import lk.slt.fieldops.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -63,6 +64,53 @@ public class AuthService {
     @Value("${app.otp.expiry-minutes}")          private int     otpExpiryMinutes;
     @Value("${app.otp.max-attempts}")            private int     otpMaxAttempts;
     @Value("${app.sms.enabled}")                 private boolean smsEnabled;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 0. CLIENT SELF-REGISTRATION
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Transactional
+    public AuthResponse registerClient(ClientRegisterRequest req) {
+        // Duplicate checks
+        if (userRepo.existsByPhone(req.getPhone())) {
+            throw new RuntimeException("A account with this phone number already exists.");
+        }
+        if (req.getEmail() != null && !req.getEmail().isBlank()
+                && userRepo.existsByEmail(req.getEmail())) {
+            throw new RuntimeException("A account with this email already exists.");
+        }
+
+        // Auto-generate username from phone digits (e.g. client_0771234567)
+        String digits   = req.getPhone().replaceAll("[^0-9]", "");
+        String username = "client_" + digits;
+        if (userRepo.existsByUsername(username)) {
+            username = "client_" + digits + "_" + System.currentTimeMillis() % 10000;
+        }
+
+        // Hash password — use random secret if client skipped it (OTP-only login)
+        String rawPw = (req.getPassword() != null && !req.getPassword().isBlank())
+                ? req.getPassword()
+                : UUID.randomUUID().toString();
+        String passwordHash = encoder.encode(rawPw);
+
+        User user = new User();
+        user.setUsername(username);
+        user.setPasswordHash(passwordHash);
+        user.setFirstName(req.getFirstName().trim());
+        user.setLastName(req.getLastName().trim());
+        user.setFullName(req.getFullName().trim());
+        user.setPhone(req.getPhone());
+        String email = (req.getEmail() != null && !req.getEmail().isBlank()) ? req.getEmail().trim() : null;
+        user.setEmail(email);
+        user.setAddress(req.getAddress());
+        user.setRole(User.Role.CLIENT);
+        user.setIsActive(true);
+
+        User saved = userRepo.save(user);
+        log.info("Client registered: id=" + saved.getId() + " phone=" + saved.getPhone());
+
+        return buildAuthResponse(saved, req.getDeviceInfo());
+    }
 
     // ══════════════════════════════════════════════════════════════════════════
     // 1. SEND OTP (for CLIENT login via phone)
@@ -124,8 +172,8 @@ public class AuthService {
         r.setUsedAt(LocalDateTime.now());
         otpRepo.save(r);
 
-        // ── NEW: Look up user by phone ───────────────────────────────────────
-        User user = userRepo.findByPhone(request.getPhoneNumber())
+        // Look up user by phone — check both phone columns and handle leading-0 variants
+        User user = findUserByPhone(request.getPhoneNumber())
                 .orElseThrow(() -> new RuntimeException(
                     "No account found for this phone number. Please contact SLT to register."));
 
@@ -151,8 +199,9 @@ public class AuthService {
 
     @Transactional
     public AuthResponse passwordLogin(PasswordLoginRequest request) {
-        // Look up user by username
+        // Look up by username, then fall back to phone (both columns, with/without leading 0)
         User user = userRepo.findByUsername(request.getUsername())
+                .or(() -> findUserByPhone(request.getUsername()))
                 .orElseThrow(() -> new RuntimeException("Invalid username or password."));
 
         // Guard: account must be active
@@ -221,6 +270,21 @@ public class AuthService {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    // PRIVATE HELPER — Robust phone lookup across both columns + format variants
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private java.util.Optional<User> findUserByPhone(String rawPhone) {
+        if (rawPhone == null || rawPhone.isBlank()) return java.util.Optional.empty();
+        String phone = rawPhone.trim();
+        // Try exact match on both columns
+        java.util.Optional<User> found = userRepo.findByPhoneOrPhoneNumber(phone);
+        if (found.isPresent()) return found;
+        // Try the alternate leading-0 format
+        String alt = phone.startsWith("0") ? phone.substring(1) : "0" + phone;
+        return userRepo.findByPhoneOrPhoneNumber(alt);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     // PRIVATE HELPER — Build AuthResponse from User entity
     // ══════════════════════════════════════════════════════════════════════════
 
@@ -244,16 +308,17 @@ public class AuthService {
         rtRepo.save(rt);
 
         // Build response
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(rtValue)
-                .tokenType("Bearer")
-                .userId(user.getId())
-                .username(user.getUsername())
-                .role(user.getRole().name())
-                .fullName(user.getFullName())
-                .branchId(user.getBranchId())
-                .expiresIn(accessTokenExpiryMs)
-                .build();
+        AuthResponse resp = new AuthResponse();
+        resp.setAccessToken(accessToken);
+        resp.setRefreshToken(rtValue);
+        resp.setTokenType("Bearer");
+        resp.setUserId(user.getId());
+        resp.setUsername(user.getUsername());
+        resp.setRole(user.getRole().name());
+        resp.setFullName(user.getFullName());
+        resp.setBranchId(user.getBranchId());
+        resp.setPhoneNumber(user.getPhone() != null ? user.getPhone() : user.getPhoneNumber());
+        resp.setExpiresIn(accessTokenExpiryMs);
+        return resp;
     }
 }

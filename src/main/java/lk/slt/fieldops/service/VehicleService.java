@@ -1,11 +1,11 @@
-package lk.slt.fieldops.vehicle.service;
+package lk.slt.fieldops.service;
 
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
-import lk.slt.fieldops.vehicle.dto.CreateVehicleRequest;
-import lk.slt.fieldops.vehicle.entity.Vehicle;
-import lk.slt.fieldops.vehicle.entity.VehicleAssignment;
-import lk.slt.fieldops.vehicle.repository.VehicleAssignmentRepository;
-import lk.slt.fieldops.vehicle.repository.VehicleRepository;
+import lk.slt.fieldops.dto.CreateVehicleRequest;
+import lk.slt.fieldops.entity.Vehicle;
+import lk.slt.fieldops.entity.VehicleAssignment;
+import lk.slt.fieldops.repository.VehicleAssignmentRepository;
+import lk.slt.fieldops.repository.VehicleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -66,13 +66,18 @@ public class VehicleService {
     public Vehicle getById(Long id) { return findOrThrow(id); }
 
     @Transactional(readOnly = true)
+    public List<Vehicle> getAll() {
+        return vehicleRepo.findAll();
+    }
+
+    @Transactional(readOnly = true)
     public List<Vehicle> getByBranch(Long branchId) {
         return vehicleRepo.findByBranchId(branchId);
     }
 
     @Transactional(readOnly = true)
     public List<Vehicle> getActiveByBranch(Long branchId) {
-        return vehicleRepo.findByBranchIdAndStatus(branchId, Vehicle.VehicleStatus.ACTIVE);
+        return vehicleRepo.findByBranchIdAndStatus(branchId, Vehicle.VehicleStatus.AVAILABLE);
     }
 
     @Transactional
@@ -82,7 +87,7 @@ public class VehicleService {
             v.setStatus(Vehicle.VehicleStatus.valueOf(status));
         } catch (IllegalArgumentException e) {
             throw new RuntimeException("Invalid status: " + status +
-                ". Valid: ACTIVE, INACTIVE, UNDER_MAINTENANCE");
+                ". Valid: AVAILABLE, IN_USE, UNDER_REPAIR, INACTIVE");
         }
         return vehicleRepo.save(v);
     }
@@ -110,10 +115,10 @@ public class VehicleService {
 
         Vehicle vehicle = findOrThrow(vehicleId);
 
-        if (vehicle.getStatus() != Vehicle.VehicleStatus.ACTIVE) {
+        if (vehicle.getStatus() != Vehicle.VehicleStatus.AVAILABLE) {
             throw new RuntimeException(
                 "Vehicle '" + vehicle.getRegistrationNumber() +
-                "' is not active (status: " + vehicle.getStatus() + ").");
+                "' is not available (status: " + vehicle.getStatus() + ").");
         }
 
         VehicleAssignment assignment = new VehicleAssignment();

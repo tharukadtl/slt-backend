@@ -1,4 +1,4 @@
-package lk.slt.fieldops.notification.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -29,7 +29,7 @@ public class Notification {
     private Long recipientId;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 35)
+    @Column(nullable = false, columnDefinition = "VARCHAR(50)")
     private NotificationType type;
 
     @Column(nullable = false, length = 200)

@@ -1,56 +1,71 @@
-package lk.slt.fieldops.fault.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
-/**
- * FaultNote.java — internal notes added by Admin or Team Lead on a fault.
- * These are NOT visible to the client. Used for internal communication.
- *
- * Example: "Customer called twice asking for update. Priority raised."
- */
 @Entity
-@Table(name = "fault_notes")
+@Table(name = "fault_notes",
+        indexes = {
+                @Index(name = "idx_fault_note_fault",  columnList = "fault_id"),
+                @Index(name = "idx_fault_note_author", columnList = "added_by"),
+                @Index(name = "idx_fault_note_time",   columnList = "created_at")
+        })
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class FaultNote {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // ─── Fault reference (flat ID) ────────────────────────
     @Column(name = "fault_id", nullable = false)
     private Long faultId;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String note;
-
-    @Column(name = "added_by")
+    // ─── Author (flat ID) ─────────────────────────────────
+    @Column(name = "added_by", nullable = false)
     private Long addedBy;
 
     @Column(name = "added_by_name", length = 150)
     private String addedByName;
 
+    // ─── Note Content ─────────────────────────────────────
+    @Column(name = "note", nullable = false, length = 2000)
+    private String note;
+
+    @Column(name = "note_type", length = 30)
+    @Builder.Default
+    private String noteType = "GENERAL";
+
+    @Column(name = "is_internal")
+    @Builder.Default
+    private Boolean isInternal = false;
+
+    @Column(name = "attachments", length = 1000)
+    private String attachments;
+
+    // ─── Timestamps ───────────────────────────────────────
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 
-    public FaultNote() {}
-
-    // ── Getters ───────────────────────────────────────────────────────────────
-    public Long          getId()          { return id; }
-    public Long          getFaultId()     { return faultId; }
-    public String        getNote()        { return note; }
-    public Long          getAddedBy()     { return addedBy; }
-    public String        getAddedByName() { return addedByName; }
-    public LocalDateTime getCreatedAt()   { return createdAt; }
-
-    // ── Setters ───────────────────────────────────────────────────────────────
-    public void setId(Long v)            { this.id          = v; }
-    public void setFaultId(Long v)       { this.faultId     = v; }
-    public void setNote(String v)        { this.note        = v; }
-    public void setAddedBy(Long v)       { this.addedBy     = v; }
-    public void setAddedByName(String v) { this.addedByName = v; }
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

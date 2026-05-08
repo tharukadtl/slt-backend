@@ -1,14 +1,14 @@
-package lk.slt.fieldops.kpi.service;
+package lk.slt.fieldops.service;
 
-import lk.slt.fieldops.job.entity.Job;
-import lk.slt.fieldops.job.repository.JobRepository;
-import lk.slt.fieldops.kpi.dto.KpiScoreDTO;
-import lk.slt.fieldops.kpi.dto.KpiSummaryDTO;
-import lk.slt.fieldops.kpi.dto.KpiTargetRequest;
-import lk.slt.fieldops.kpi.entity.KpiScore;
-import lk.slt.fieldops.kpi.entity.KpiTarget;
-import lk.slt.fieldops.kpi.repository.KpiScoreRepository;
-import lk.slt.fieldops.kpi.repository.KpiTargetRepository;
+import lk.slt.fieldops.entity.Job;
+import lk.slt.fieldops.repository.JobRepository;
+import lk.slt.fieldops.dto.KpiScoreDTO;
+import lk.slt.fieldops.dto.KpiSummaryDTO;
+import lk.slt.fieldops.dto.KpiTargetRequest;
+import lk.slt.fieldops.entity.KpiScore;
+import lk.slt.fieldops.entity.KpiTarget;
+import lk.slt.fieldops.repository.KpiScoreRepository;
+import lk.slt.fieldops.repository.KpiTargetRepository;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -119,7 +119,7 @@ public class KpiService {
         score.setJobsOnHold((int) onHold);
         score.setJobsCancelled((int) cancelled);
         score.setSlaCompliancePercent(slaCompliance);
-        score.setOverallScore(overall);
+        score.setOverallScore(overall.doubleValue());
 
         scoreRepo.save(score);
         log.info("KPI saved: tech=" + techId + " date=" + date + " score=" + overall);
@@ -167,11 +167,12 @@ public class KpiService {
         int totalOnHold    = scores.stream().mapToInt(s -> s.getJobsOnHold()    != null ? s.getJobsOnHold()    : 0).sum();
         int totalCancelled = scores.stream().mapToInt(s -> s.getJobsCancelled() != null ? s.getJobsCancelled() : 0).sum();
 
-        BigDecimal avgScore = scores.stream()
+        double avgScoreRaw = scores.stream()
             .filter(s -> s.getOverallScore() != null)
-            .map(KpiScore::getOverallScore)
-            .reduce(BigDecimal.ZERO, BigDecimal::add)
-            .divide(BigDecimal.valueOf(Math.max(1, scores.size())), 2, RoundingMode.HALF_UP);
+            .mapToDouble(KpiScore::getOverallScore)
+            .average()
+            .orElse(0.0);
+        BigDecimal avgScore = BigDecimal.valueOf(avgScoreRaw).setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal completionRate = totalAssigned > 0
             ? BigDecimal.valueOf(totalCompleted * 100.0 / totalAssigned).setScale(2, RoundingMode.HALF_UP)
@@ -235,8 +236,10 @@ public class KpiService {
         dto.setAvgResolutionHours(s.getAvgResolutionHours());
         dto.setSlaCompliancePercent(s.getSlaCompliancePercent());
         dto.setAvgCustomerRating(s.getAvgCustomerRating());
-        dto.setOverallScore(s.getOverallScore());
-        dto.setPerformanceLabel(performanceLabel(s.getOverallScore()));
+        dto.setOverallScore(s.getOverallScore() != null
+            ? BigDecimal.valueOf(s.getOverallScore()) : null);
+        dto.setPerformanceLabel(performanceLabel(s.getOverallScore() != null
+            ? BigDecimal.valueOf(s.getOverallScore()) : null));
         return dto;
     }
 

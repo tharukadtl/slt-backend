@@ -1,20 +1,30 @@
-package lk.slt.fieldops.inventory.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * StockTransaction.java — maps to `stock_transactions` table.
- * Records every change in stock — IN (restock) or OUT (job usage / request).
- * Full audit trail for inventory.
- */
 @Entity
-@Table(name = "stock_transactions")
+@Table(name = "stock_transactions",
+        indexes = {
+                @Index(name = "idx_stock_tx_material", columnList = "material_id"),
+                @Index(name = "idx_stock_tx_type",     columnList = "transaction_type"),
+                @Index(name = "idx_stock_tx_created",  columnList = "created_at"),
+                @Index(name = "idx_stock_tx_by",       columnList = "performed_by")
+        })
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class StockTransaction {
 
-    public enum TransactionType { STOCK_IN, STOCK_OUT, ADJUSTMENT }
-    public enum ReferenceType   { JOB, MATERIAL_REQUEST, MANUAL_ADJUSTMENT, INITIAL_STOCK }
+    public enum TransactionType { STOCK_IN, STOCK_OUT, ADJUSTMENT, INITIAL_STOCK }
+    public enum ReferenceType   { JOB, MANUAL_ADJUSTMENT, INITIAL_STOCK }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,11 +36,26 @@ public class StockTransaction {
     @Column(name = "material_name", length = 200)
     private String materialName;
 
+    @Column(name = "material_sku", length = 50)
+    private String materialSku;
+
+    @Column(name = "material_unit", length = 20)
+    private String materialUnit;
+
+    @Column(name = "performed_by")
+    private Long performedBy;
+
+    @Column(name = "performed_by_name", length = 150)
+    private String performedByName;
+
+    @Column(name = "performed_by_role", length = 30)
+    private String performedByRole;
+
     @Enumerated(EnumType.STRING)
-    @Column(name = "transaction_type", nullable = false, length = 15)
+    @Column(name = "transaction_type", nullable = false, length = 30)
     private TransactionType transactionType;
 
-    @Column(nullable = false, precision = 12, scale = 3)
+    @Column(name = "quantity", nullable = false, precision = 12, scale = 3)
     private BigDecimal quantity;
 
     @Column(name = "stock_before", precision = 12, scale = 3)
@@ -40,50 +65,32 @@ public class StockTransaction {
     private BigDecimal stockAfter;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "reference_type", length = 20)
+    @Column(name = "reference_type", length = 30)
     private ReferenceType referenceType;
 
     @Column(name = "reference_id")
-    private Long referenceId;           // jobId or materialRequestId
+    private Long referenceId;
 
-    @Column(length = 500)
+    @Column(name = "reason", length = 500)
+    private String reason;
+
+    @Column(name = "reference", length = 100)
+    private String reference;
+
+    @Column(name = "notes", length = 1000)
     private String notes;
 
-    @Column(name = "performed_by")
-    private Long performedBy;
+    @Column(name = "unit_cost", precision = 12, scale = 2)
+    private BigDecimal unitCost;
+
+    @Column(name = "total_cost", precision = 14, scale = 2)
+    private BigDecimal totalCost;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @PrePersist
-    protected void onCreate() { this.createdAt = LocalDateTime.now(); }
-
-    public StockTransaction() {}
-
-    // Getters
-    public Long            getId()              { return id; }
-    public Long            getMaterialId()      { return materialId; }
-    public String          getMaterialName()    { return materialName; }
-    public TransactionType getTransactionType() { return transactionType; }
-    public BigDecimal      getQuantity()        { return quantity; }
-    public BigDecimal      getStockBefore()     { return stockBefore; }
-    public BigDecimal      getStockAfter()      { return stockAfter; }
-    public ReferenceType   getReferenceType()   { return referenceType; }
-    public Long            getReferenceId()     { return referenceId; }
-    public String          getNotes()           { return notes; }
-    public Long            getPerformedBy()     { return performedBy; }
-    public LocalDateTime   getCreatedAt()       { return createdAt; }
-
-    // Setters
-    public void setId(Long v)                       { this.id              = v; }
-    public void setMaterialId(Long v)               { this.materialId      = v; }
-    public void setMaterialName(String v)           { this.materialName    = v; }
-    public void setTransactionType(TransactionType v){ this.transactionType = v; }
-    public void setQuantity(BigDecimal v)           { this.quantity        = v; }
-    public void setStockBefore(BigDecimal v)        { this.stockBefore     = v; }
-    public void setStockAfter(BigDecimal v)         { this.stockAfter      = v; }
-    public void setReferenceType(ReferenceType v)   { this.referenceType   = v; }
-    public void setReferenceId(Long v)              { this.referenceId     = v; }
-    public void setNotes(String v)                  { this.notes           = v; }
-    public void setPerformedBy(Long v)              { this.performedBy     = v; }
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+    }
 }

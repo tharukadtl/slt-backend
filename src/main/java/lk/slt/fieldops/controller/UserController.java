@@ -1,11 +1,11 @@
-package lk.slt.fieldops.user.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.user.dto.ChangePasswordRequest;
-import lk.slt.fieldops.user.dto.CreateUserRequest;
-import lk.slt.fieldops.user.dto.UpdateUserRequest;
-import lk.slt.fieldops.user.dto.UserDTO;
-import lk.slt.fieldops.user.service.UserService;
+import lk.slt.fieldops.dto.ChangePasswordRequest;
+import lk.slt.fieldops.dto.CreateUserRequest;
+import lk.slt.fieldops.dto.UpdateUserRequest;
+import lk.slt.fieldops.dto.UserDTO;
+import lk.slt.fieldops.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -35,8 +35,15 @@ public class UserController {
     @GetMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','TEAM_LEAD')")
     public ResponseEntity<List<UserDTO>> getAll(
-            @RequestParam(required = false) String role,
-            @RequestParam(required = false) Long branchId) {
+            @RequestParam(required = false) String  role,
+            @RequestParam(required = false) Long    branchId,
+            @RequestParam(required = false) Boolean activeOnly) {
+        if (role != null && branchId != null) {
+            return ResponseEntity.ok(
+                Boolean.TRUE.equals(activeOnly)
+                    ? userService.getActiveByRoleAndBranch(role, branchId)
+                    : userService.getByRoleAndBranch(role, branchId));
+        }
         if (role != null)     return ResponseEntity.ok(userService.getByRole(role));
         if (branchId != null) return ResponseEntity.ok(userService.getByBranch(branchId));
         return ResponseEntity.ok(userService.getAll());
@@ -79,6 +86,13 @@ public class UserController {
             "message", "Password reset successfully",
             "newPassword", newPassword
         ));
+    }
+
+    @PatchMapping("/profile")
+    public ResponseEntity<UserDTO> updateProfile(
+            @RequestBody java.util.Map<String, Object> body,
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(userService.updateProfile(userId, body));
     }
 
     @PostMapping("/fcm-token")

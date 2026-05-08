@@ -1,4 +1,4 @@
-package lk.slt.fieldops.payment.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -8,15 +8,15 @@ import java.time.LocalDateTime;
  * Payment.java — maps to `payments` table.
  *
  * Workflow:
- *   Team Lead submits  → PENDING
- *   Admin approves     → BILLED  (generates bill reference e.g. BILL-2026-02-00001)
- *   Admin rejects      → REJECTED (with reason)
+ *   Team Lead submits  → DRAFT
+ *   Admin approves     → FINAL  (generates bill reference e.g. BILL-2026-02-00001)
+ *   Admin rejects      → NOT_APPROVED (with reason)
  */
 @Entity
 @Table(name = "payments")
 public class Payment {
 
-    public enum PaymentStatus { PENDING, APPROVED, REJECTED, BILLED }
+    public enum PaymentStatus { DRAFT, FINAL, NOT_APPROVED }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -24,6 +24,9 @@ public class Payment {
 
     @Column(name = "payment_number", nullable = false, unique = true, length = 30)
     private String paymentNumber;
+
+    @Column(name = "payment_reference", nullable = false, length = 50)
+    private String paymentReference;
 
     @Column(name = "job_id", nullable = false)
     private Long jobId;
@@ -73,7 +76,7 @@ public class Payment {
     @Column(name = "approved_amount", precision = 12, scale = 2)
     private BigDecimal approvedAmount;
 
-    @Column(name = "customer_signature_url", length = 500)
+    @Column(name = "customer_signature_url", columnDefinition = "TEXT")
     private String customerSignatureUrl;
 
     @Column(name = "job_photos_urls", columnDefinition = "TEXT")
@@ -87,7 +90,7 @@ public class Payment {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
-    private PaymentStatus status = PaymentStatus.PENDING;
+    private PaymentStatus status = PaymentStatus.DRAFT;
 
     @Column(name = "approved_by")
     private Long approvedBy;
@@ -127,6 +130,7 @@ public class Payment {
 
     public Long          getId()                      { return id; }
     public String        getPaymentNumber()           { return paymentNumber; }
+    public String        getPaymentReference()        { return paymentReference; }
     public Long          getJobId()                   { return jobId; }
     public String        getJobNumber()               { return jobNumber; }
     public Long          getFaultId()                 { return faultId; }
@@ -159,6 +163,7 @@ public class Payment {
 
     public void setId(Long v)                           { this.id                      = v; }
     public void setPaymentNumber(String v)              { this.paymentNumber           = v; }
+    public void setPaymentReference(String v)           { this.paymentReference        = v; }
     public void setJobId(Long v)                        { this.jobId                   = v; }
     public void setJobNumber(String v)                  { this.jobNumber               = v; }
     public void setFaultId(Long v)                      { this.faultId                 = v; }

@@ -1,4 +1,4 @@
-package lk.slt.fieldops.fault.dto;
+package lk.slt.fieldops.dto;
 
 import java.time.LocalDateTime;
 
@@ -42,6 +42,49 @@ public class FaultDTO {
     private long    ageHours;   // how long since reported
 
     public FaultDTO() {}
+
+    // ── Admin portal compatibility aliases ────────────────────────────────────
+
+    /** Maps to locationAddress — used by admin portal as f.address */
+    public String getAddress() { return locationAddress; }
+
+    /** Maps to reportedAt as ISO string — used by admin portal as f.createdAt */
+    public String getCreatedAt() {
+        return reportedAt != null ? reportedAt.toString() : null;
+    }
+
+    /** Maps REPORTED → OPEN so admin portal status chips work correctly */
+    public String getStatusDisplay() {
+        return "REPORTED".equals(status) ? "OPEN" : status;
+    }
+
+    /** Nested reporter object for admin portal: f.reportedBy.fullName / .phone */
+    public ReportedBy getReportedBy() {
+        if (customerName == null && customerPhone == null) return null;
+        return new ReportedBy(customerName, customerPhone);
+    }
+
+    /** Nested assignee object for admin portal: f.assignedTo.id / .fullName */
+    public AssignedTo getAssignedTo() {
+        if (assignedTeamLeadId == null) return null;
+        return new AssignedTo(assignedTeamLeadId, assignedTeamLeadName);
+    }
+
+    public static class ReportedBy {
+        private final String fullName;
+        private final String phone;
+        ReportedBy(String fullName, String phone) { this.fullName = fullName; this.phone = phone; }
+        public String getFullName() { return fullName; }
+        public String getPhone()    { return phone; }
+    }
+
+    public static class AssignedTo {
+        private final Long   id;
+        private final String fullName;
+        AssignedTo(Long id, String fullName) { this.id = id; this.fullName = fullName; }
+        public Long   getId()       { return id; }
+        public String getFullName() { return fullName; }
+    }
 
     // Getters
     public Long   getId()                   { return id; }

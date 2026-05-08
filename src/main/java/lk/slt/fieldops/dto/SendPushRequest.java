@@ -1,4 +1,4 @@
-package lk.slt.fieldops.notification.dto;
+package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;

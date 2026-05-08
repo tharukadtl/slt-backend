@@ -1,10 +1,12 @@
-package lk.slt.fieldops.auth.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.auth.dto.AuthResponse;
-import lk.slt.fieldops.auth.dto.OtpVerifyRequest;
-import lk.slt.fieldops.auth.dto.PasswordLoginRequest;
-import lk.slt.fieldops.auth.service.AuthService;
+import lk.slt.fieldops.dto.AuthResponse;
+import lk.slt.fieldops.dto.ClientRegisterRequest;
+import lk.slt.fieldops.dto.OtpVerifyRequest;
+import lk.slt.fieldops.dto.PasswordLoginRequest;
+import lk.slt.fieldops.service.AuthService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +21,12 @@ public class AuthController {
 
     public AuthController(AuthService authService) {
         this.authService = authService;
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<AuthResponse> register(@Valid @RequestBody ClientRegisterRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(authService.registerClient(request));
     }
 
     @PostMapping("/otp/send")

@@ -1,4 +1,4 @@
-package lk.slt.fieldops.inventory.dto;
+package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;

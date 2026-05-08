@@ -1,4 +1,4 @@
-package lk.slt.fieldops.vehicle.dto;
+package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -33,7 +33,6 @@ public class CreateVehicleRequest {
     private String  vehicleType;   // VAN / CAR / MOTORCYCLE / TRUCK / OTHER
     private String  fuelType;      // PETROL / DIESEL / ELECTRIC / HYBRID
 
-    @NotNull(message = "Branch ID is required")
     private Long branchId;
 
     private Integer   currentOdometer = 0;

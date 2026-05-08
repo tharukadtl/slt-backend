@@ -1,6 +1,6 @@
-package lk.slt.fieldops.vehicle.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.vehicle.entity.Vehicle;
+import lk.slt.fieldops.entity.Vehicle;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -24,12 +24,12 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
      * Vehicles where insurance_expiry OR revenue_license_expiry
      * is within the next 30 days.
      */
-    @Query("SELECT v FROM Vehicle v WHERE v.status = 'ACTIVE' AND " +
+    @Query("SELECT v FROM Vehicle v WHERE v.status = 'AVAILABLE' AND " +
            "(v.insuranceExpiry <= :alertDate OR v.revenueLicenseExpiry <= :alertDate)")
     List<Vehicle> findVehiclesWithExpiringDocuments(LocalDate alertDate);
 
     /** Vehicles with expired documents (past today) */
-    @Query("SELECT v FROM Vehicle v WHERE v.status = 'ACTIVE' AND " +
+    @Query("SELECT v FROM Vehicle v WHERE v.status = 'AVAILABLE' AND " +
            "(v.insuranceExpiry < CURRENT_DATE OR v.revenueLicenseExpiry < CURRENT_DATE)")
     List<Vehicle> findVehiclesWithExpiredDocuments();
 }

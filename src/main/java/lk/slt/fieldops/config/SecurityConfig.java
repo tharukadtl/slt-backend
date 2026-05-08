@@ -46,11 +46,11 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
-                    "/api/auth/**", "/api/users/register",
+                    "/api/auth/**",
                     "/swagger-ui/**", "/swagger-ui.html",
                     "/v3/api-docs/**", "/actuator/health"
                 ).permitAll()
-                .requestMatchers("/api/branches/**").hasRole("SUPER_ADMIN")
+                .requestMatchers("/api/branches/**").hasAnyRole("SUPER_ADMIN", "ADMIN")
                 .requestMatchers(
                     "/api/users/admin/**", "/api/faults/*/assign",
                     "/api/payments/*/approve", "/api/payments/*/reject",
@@ -102,7 +102,9 @@ public class SecurityConfig {
         CorsConfiguration c = new CorsConfiguration();
         c.setAllowedOriginPatterns(List.of(
             "http://localhost:3000", "http://localhost:8081",
-            "http://10.0.2.2:*",    "http://192.168.*.*:*"));
+            "http://10.0.2.2:*",    "http://192.168.*.*:*",
+            "https://*.ngrok-free.app", "https://*.ngrok.io",
+            "http://*.ngrok-free.app",  "http://*.ngrok.io"));
         c.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         c.setAllowedHeaders(List.of("*"));
         c.setAllowCredentials(true);

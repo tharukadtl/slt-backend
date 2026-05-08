@@ -1,263 +1,205 @@
-package lk.slt.fieldops.fault.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.fault.dto.*;
-import lk.slt.fieldops.fault.entity.FaultHistory;
-import lk.slt.fieldops.fault.entity.FaultNote;
-import lk.slt.fieldops.fault.service.FaultService;
+import lk.slt.fieldops.dto.FaultAssignmentDTO;
+import lk.slt.fieldops.dto.FaultDTO;
+import lk.slt.fieldops.dto.ReportFaultRequest;
+import lk.slt.fieldops.entity.FaultHistory;
+import lk.slt.fieldops.entity.User;
+import lk.slt.fieldops.repository.UserRepository;
+import lk.slt.fieldops.service.FaultAssignmentService;
+import lk.slt.fieldops.service.FaultService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 
-/**
- * FaultController — 18 REST endpoints for the fault lifecycle.
- *
- * BASE URL: /api/faults
- *
- * ── CLIENT ENDPOINTS ─────────────────────────────────────────────────────────
- * POST   /api/faults                        Report a new fault
- * GET    /api/faults/my                     Get my own faults (client)
- * GET    /api/faults/{id}                   Get one fault by ID
- * PATCH  /api/faults/{id}/cancel            Cancel my fault
- * POST   /api/faults/{id}/rating            Rate completed fault
- *
- * ── ADMIN ENDPOINTS ──────────────────────────────────────────────────────────
- * GET    /api/faults                        Get all faults (filter by branch/status)
- * GET    /api/faults/open                   Get all open faults (Super Admin)
- * POST   /api/faults/{id}/assign            Assign fault to Team Lead
- * PATCH  /api/faults/{id}/priority          Change priority
- * PATCH  /api/faults/{id}/escalate          Escalate fault
- * POST   /api/faults/{id}/notes             Add internal note
- * GET    /api/faults/{id}/notes             Get internal notes
- *
- * ── TECHNICIAN / TEAM LEAD ENDPOINTS ─────────────────────────────────────────
- * PATCH  /api/faults/{id}/status            Update status (IN_PROGRESS/HOLD/COMPLETED)
- * GET    /api/faults/assigned               Get faults assigned to my team
- * GET    /api/faults/{id}/history           Get full status timeline
- *
- * ── POSTMAN TESTING ───────────────────────────────────────────────────────────
- * 1. Login: POST /api/auth/login → copy token
- * 2. Report: POST /api/faults (Authorization: Bearer <token>)
- *    Body: { "category":"INTERNET", "description":"No internet",
- *            "locationAddress":"No 5 Main St, Colombo", "branchId":1 }
- * 3. Assign: POST /api/faults/1/assign
- *    Body: { "teamLeadId": 5 }
- */
+@Slf4j
 @RestController
 @RequestMapping("/api/faults")
+@RequiredArgsConstructor
 public class FaultController {
 
-    private final FaultService faultService;
+    private final FaultAssignmentService faultAssignmentService;
+    private final FaultService           faultService;
+    private final UserRepository         userRepo;
 
-    public FaultController(FaultService faultService) {
-        this.faultService = faultService;
+    // ─── GET /api/faults — Admin/SuperAdmin: all faults ──────────────────────
+    @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<FaultDTO>> getAll() {
+        return ResponseEntity.ok(faultService.getAllFaults());
     }
 
-    // ── 1. CLIENT: Report a new fault ────────────────────────────────────────
-    @PostMapping
-    public ResponseEntity<FaultDTO> reportFault(
-            @Valid @RequestBody ReportFaultRequest request,
-            @AuthenticationPrincipal Long userId) {
-
-        // TODO Phase 3: Load customer name/phone from UserRepository
-        // User user = userRepository.findById(userId)...
-        String customerName  = "Customer #" + userId;   // placeholder
-        String customerPhone = "N/A";                    // placeholder
-
-        FaultDTO created = faultService.reportFault(request, userId, customerName, customerPhone);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
-    }
-
-    // ── 2. CLIENT: Get my own faults ─────────────────────────────────────────
+    // ─── GET /api/faults/my — Team Lead: faults assigned to me ───────────────
     @GetMapping("/my")
-    public ResponseEntity<List<FaultDTO>> getMyFaults(
+    @PreAuthorize("hasRole('TEAM_LEAD')")
+    public ResponseEntity<List<FaultDTO>> getMyAssignedFaults(
             @AuthenticationPrincipal Long userId) {
+        log.info("GET /api/faults/my teamLeadId={}", userId);
+        return ResponseEntity.ok(faultService.getFaultsByTeamLead(userId));
+    }
 
+    // ─── GET /api/faults/my-reports — CLIENT: faults I reported ─────────────
+    @GetMapping("/my-reports")
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<List<FaultDTO>> getMyReportedFaults(
+            @AuthenticationPrincipal Long userId) {
+        log.info("GET /api/faults/my-reports customerId={}", userId);
         return ResponseEntity.ok(faultService.getMyFaults(userId));
     }
 
-    // ── 3. Get one fault by ID ────────────────────────────────────────────────
+    // ─── POST /api/faults — CLIENT: report a new fault ───────────────────────
+    @PostMapping
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<FaultDTO> reportFault(
+            @Valid @RequestBody ReportFaultRequest req,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/faults customerId={}", userId);
+        User user = userRepo.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        req.setCategory(normalizeMobileCategory(req.getCategory()));
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(faultService.reportFault(req, userId,
+                user.getFullName(),
+                user.getPhone() != null ? user.getPhone() : user.getPhoneNumber()));
+    }
+
+    // ─── PATCH /api/faults/{id}/cancel — CLIENT: cancel their fault ──────────
+    @PatchMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('CLIENT','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<FaultDTO> cancelFault(
+            @PathVariable Long id,
+            @RequestBody(required = false) Map<String, String> body,
+            @AuthenticationPrincipal Long userId) {
+        log.info("PATCH /api/faults/{}/cancel userId={}", id, userId);
+        User user = userRepo.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        String reason = (body != null ? body.getOrDefault("reason", "") : "");
+        if (reason.isBlank()) reason = "Cancelled by " + user.getFullName();
+        boolean isClient = SecurityContextHolder.getContext().getAuthentication()
+            .getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_CLIENT"));
+        FaultHistory.ChangedByRole role = isClient
+            ? FaultHistory.ChangedByRole.CLIENT
+            : FaultHistory.ChangedByRole.ADMIN;
+        return ResponseEntity.ok(faultService.cancelFault(id, reason, userId, user.getFullName(), role));
+    }
+
+    // ─── GET /api/faults/{id} ─────────────────────────────────────────────────
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('CLIENT','ADMIN','SUPER_ADMIN','TEAM_LEAD','TECHNICIAN')")
     public ResponseEntity<FaultDTO> getById(@PathVariable Long id) {
         return ResponseEntity.ok(faultService.getFaultById(id));
     }
 
-    // ── 4. ADMIN: Get all faults (with optional filters) ─────────────────────
-    // GET /api/faults?branchId=1&status=REPORTED
-    @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
-    public ResponseEntity<List<FaultDTO>> getAllFaults(
-            @RequestParam(required = false) Long   branchId,
-            @RequestParam(required = false) String status) {
-
-        if (branchId != null) {
-            return ResponseEntity.ok(faultService.getFaultsByBranch(branchId, status));
-        }
-        return ResponseEntity.ok(faultService.getOpenFaults());
-    }
-
-    // ── 5. SUPER ADMIN: Get all open faults across all branches ──────────────
-    @GetMapping("/open")
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<List<FaultDTO>> getOpenFaults() {
-        return ResponseEntity.ok(faultService.getOpenFaults());
-    }
-
-    // ── 6. ADMIN: Assign fault to a Team Lead ─────────────────────────────────
-    @PostMapping("/{id}/assign")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<FaultDTO> assign(
-            @PathVariable Long id,
-            @Valid @RequestBody AssignFaultRequest request,
-            @AuthenticationPrincipal Long adminId) {
-
-        // TODO Phase 3: Load admin name and TL name from UserRepository
-        String adminName   = "Admin #" + adminId;                // placeholder
-        String teamLeadName = "Team Lead #" + request.getTeamLeadId(); // placeholder
-
-        return ResponseEntity.ok(
-            faultService.assignToTeamLead(id, request, adminId, adminName, teamLeadName));
-    }
-
-    // ── 7. TECHNICIAN / TEAM LEAD: Update fault status ────────────────────────
-    // PATCH /api/faults/{id}/status
-    // Body: { "newStatus":"IN_PROGRESS" } or { "newStatus":"HOLD", "reason":"..." }
+    // ─── PATCH /api/faults/{id}/status ───────────────────────────────────────
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD','TECHNICIAN')")
     public ResponseEntity<FaultDTO> updateStatus(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateFaultRequest request,
+            @RequestBody lk.slt.fieldops.dto.UpdateFaultRequest req,
             @AuthenticationPrincipal Long userId) {
-
-        // TODO Phase 3: Load user role from security context properly
-        String userName = "User #" + userId;   // placeholder
-        FaultHistory.ChangedByRole role = FaultHistory.ChangedByRole.TECHNICIAN;
-
-        return ResponseEntity.ok(
-            faultService.updateStatus(id, request, userId, userName, role));
+        return ResponseEntity.ok(faultService.updateStatus(
+            id, req, userId, "Staff #" + userId,
+            lk.slt.fieldops.entity.FaultHistory.ChangedByRole.ADMIN));
     }
 
-    // ── 8. CLIENT or ADMIN: Cancel a fault ────────────────────────────────────
-    @PatchMapping("/{id}/cancel")
-    public ResponseEntity<FaultDTO> cancel(
+    // ─── POST /api/faults/{id}/assign — Admin assigns fault to Team Lead ──────
+    @PostMapping("/{id}/assign")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<FaultAssignmentDTO.AssignmentResponse> assignFault(
             @PathVariable Long id,
-            @RequestBody(required = false) Map<String, String> body,
+            @Valid @RequestBody FaultAssignmentDTO.AssignRequest req,
             @AuthenticationPrincipal Long userId) {
-
-        String reason = body != null ? body.get("reason") : "Cancelled by user";
-        // TODO Phase 3: Determine role from user context
-        return ResponseEntity.ok(
-            faultService.cancelFault(id, reason, userId,
-                "User #" + userId, FaultHistory.ChangedByRole.CLIENT));
+        log.info("POST /api/faults/{}/assign teamLeadId={}", id, req.getTechnicianId());
+        return ResponseEntity.ok(faultAssignmentService.assignFault(id, req, userId));
     }
 
-    // ── 9. Get fault status history / timeline ────────────────────────────────
-    @GetMapping("/{id}/history")
-    public ResponseEntity<List<FaultHistory>> getHistory(@PathVariable Long id) {
-        return ResponseEntity.ok(faultService.getFaultHistory(id));
+    // ─── POST /api/faults/{id}/reassign ──────────────────────────────────────
+    @PostMapping("/{id}/reassign")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<FaultAssignmentDTO.AssignmentResponse> reassignFault(
+            @PathVariable Long id,
+            @Valid @RequestBody FaultAssignmentDTO.ReassignRequest req,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/faults/{}/reassign newTeamLeadId={}", id, req.getNewTechnicianId());
+        return ResponseEntity.ok(faultAssignmentService.reassignFault(id, req, userId));
     }
 
-    // ── 10. ADMIN: Add internal note ─────────────────────────────────────────
+    // ─── POST /api/faults/{id}/escalate ──────────────────────────────────────
+    @PostMapping("/{id}/escalate")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
+    public ResponseEntity<FaultAssignmentDTO.AssignmentResponse> escalateFault(
+            @PathVariable Long id,
+            @Valid @RequestBody FaultAssignmentDTO.EscalateRequest req,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/faults/{}/escalate", id);
+        return ResponseEntity.ok(faultAssignmentService.escalateFault(id, req, userId));
+    }
+
+    // ─── POST /api/faults/bulk-assign ────────────────────────────────────────
+    @PostMapping("/bulk-assign")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<FaultAssignmentDTO.BulkAssignResponse> bulkAssign(
+            @Valid @RequestBody FaultAssignmentDTO.BulkAssignRequest req,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/faults/bulk-assign faultCount={}, teamLeadId={}",
+                req.getFaultIds().size(), req.getTechnicianId());
+        return ResponseEntity.ok(faultAssignmentService.bulkAssign(req, userId));
+    }
+
+    // ─── GET /api/faults/{id}/timeline ───────────────────────────────────────
+    @GetMapping("/{id}/timeline")
+    @PreAuthorize("hasAnyRole('CLIENT','TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<FaultAssignmentDTO.TimelineEventDTO>> getFaultTimeline(
+            @PathVariable Long id) {
+        log.info("GET /api/faults/{}/timeline", id);
+        return ResponseEntity.ok(faultAssignmentService.getFaultTimeline(id));
+    }
+
+    // ─── POST /api/faults/{id}/notes ─────────────────────────────────────────
     @PostMapping("/{id}/notes")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
-    public ResponseEntity<FaultNote> addNote(
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<FaultAssignmentDTO.FaultNoteResponse> addNote(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody FaultAssignmentDTO.AddNoteRequest req,
             @AuthenticationPrincipal Long userId) {
-
-        String note = body.get("note");
-        if (note == null || note.isBlank()) {
-            return ResponseEntity.badRequest().build();
-        }
-        return ResponseEntity.status(HttpStatus.CREATED)
-            .body(faultService.addNote(id, note, userId, "User #" + userId));
+        log.info("POST /api/faults/{}/notes", id);
+        return ResponseEntity.ok(faultAssignmentService.addFaultNote(id, req, userId));
     }
 
-    // ── 11. Get notes for a fault ─────────────────────────────────────────────
+    // ─── GET /api/faults/{id}/notes ──────────────────────────────────────────
     @GetMapping("/{id}/notes")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
-    public ResponseEntity<List<FaultNote>> getNotes(@PathVariable Long id) {
-        return ResponseEntity.ok(faultService.getNotes(id));
-    }
-
-    // ── 12. CLIENT: Rate a completed fault ───────────────────────────────────
-    @PostMapping("/{id}/rating")
-    public ResponseEntity<Map<String, String>> rate(
+    @PreAuthorize("hasAnyRole('CLIENT','TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<FaultAssignmentDTO.FaultNoteResponse>> getNotes(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> body) {
-
-        // TODO: Add rateCompletedFault() to FaultService in Phase 5
-        return ResponseEntity.ok(Map.of("message", "Rating saved — TODO implement in Phase 5"));
+            @RequestParam(defaultValue = "false") boolean internal) {
+        log.info("GET /api/faults/{}/notes internal={}", id, internal);
+        boolean isStaff = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().contains("ADMIN")
+                        || a.getAuthority().contains("TECHNICIAN")
+                        || a.getAuthority().contains("TEAM_LEAD"));
+        return ResponseEntity.ok(faultAssignmentService.getFaultNotes(id, internal && isStaff));
     }
 
-    // ── 13. ADMIN: Change priority ────────────────────────────────────────────
-    @PatchMapping("/{id}/priority")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<Map<String, String>> changePriority(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
-
-        // TODO: Add changePriority() to FaultService
-        return ResponseEntity.ok(Map.of("message", "Priority updated — TODO implement"));
-    }
-
-    // ── 14. ADMIN: Escalate fault ─────────────────────────────────────────────
-    @PatchMapping("/{id}/escalate")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<Map<String, String>> escalate(
-            @PathVariable Long id,
-            @RequestBody Map<String, String> body,
-            @AuthenticationPrincipal Long adminId) {
-
-        // TODO: Add escalateFault() to FaultService
-        return ResponseEntity.ok(Map.of("message", "Fault escalated — TODO implement"));
-    }
-
-    // ── 15. TEAM LEAD: Get faults assigned to my team ─────────────────────────
-    @GetMapping("/assigned")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN')")
-    public ResponseEntity<List<FaultDTO>> getAssigned(
-            @AuthenticationPrincipal Long userId) {
-
-        // TODO Phase 3: Pass user's branchId from JWT claims
-        return ResponseEntity.ok(faultService.getOpenFaults());
-    }
-
-    // ── 16. Get fault by fault number (e.g. FLT-2026-00001) ──────────────────
-    @GetMapping("/number/{faultNumber}")
-    public ResponseEntity<FaultDTO> getByFaultNumber(@PathVariable String faultNumber) {
-        return ResponseEntity.ok(faultService.getFaultById(
-            faultService.getFaultById(1L).getId())); // TODO: add findByFaultNumber to service
-    }
-
-    // ── 17. ADMIN: Get faults by branch with status filter ───────────────────
-    @GetMapping("/branch/{branchId}")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<FaultDTO>> getByBranch(
-            @PathVariable Long branchId,
-            @RequestParam(required = false) String status) {
-
-        return ResponseEntity.ok(faultService.getFaultsByBranch(branchId, status));
-    }
-
-    // ── 18. Health check / count endpoint ────────────────────────────────────
-    @GetMapping("/count")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<Map<String, Object>> count(
-            @RequestParam(required = false) Long branchId) {
-
-        List<FaultDTO> open = branchId != null
-            ? faultService.getFaultsByBranch(branchId, null)
-            : faultService.getOpenFaults();
-
-        return ResponseEntity.ok(Map.of(
-            "totalOpen", open.size(),
-            "branchId",  branchId != null ? branchId : "all"
-        ));
+    // Maps mobile app category names to backend FaultCategory enum values
+    private String normalizeMobileCategory(String category) {
+        if (category == null) return "OTHER";
+        return switch (category.toLowerCase()) {
+            case "broadband", "internet" -> "INTERNET";
+            case "telephone", "phone"   -> "PHONE";
+            case "fiber"                -> "INTERNET";
+            case "television", "tv"     -> "TV";
+            default                     -> "OTHER";
+        };
     }
 }

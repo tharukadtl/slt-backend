@@ -1,4 +1,4 @@
-package lk.slt.fieldops.job.dto;
+package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
@@ -17,10 +17,8 @@ import java.util.List;
  */
 public class BodRequest {
 
-    @NotNull(message = "Vehicle ID is required")
     private Long vehicleId;
 
-    @NotNull(message = "Starting odometer is required")
     private Integer odometerStart;
 
     private Double latitude;

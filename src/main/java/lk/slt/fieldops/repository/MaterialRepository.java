@@ -1,43 +1,48 @@
-package lk.slt.fieldops.inventory.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.inventory.entity.Material;
+import lk.slt.fieldops.entity.Material;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface MaterialRepository extends JpaRepository<Material, Long> {
 
-    Optional<Material> findBySku(String sku);
-
     boolean existsBySku(String sku);
 
-    List<Material> findByBranchId(Long branchId);
+    Optional<Material> findBySku(String sku);
 
-    List<Material> findByBranchIdAndIsActiveTrue(Long branchId);
+    @Query("SELECT m FROM Material m WHERE m.isActive = true ORDER BY m.name ASC")
+    List<Material> findAllActive();
 
-    List<Material> findByCategoryId(Long categoryId);
+    @Query("SELECT m FROM Material m WHERE m.categoryId = :categoryId AND m.isActive = true ORDER BY m.name ASC")
+    List<Material> findByCategoryId(@Param("categoryId") Long categoryId);
 
-    List<Material> findByChargeType(Material.ChargeType chargeType);
+    @Query("SELECT m FROM Material m WHERE m.branchId = :branchId AND m.isActive = true ORDER BY m.name ASC")
+    List<Material> findByBranchIdAndIsActiveTrue(@Param("branchId") Long branchId);
 
-    /**
-     * LOW STOCK ALERT — FR-39
-     * Returns any material where current_stock <= minimum_threshold
-     */
-    @Query("SELECT m FROM Material m WHERE m.currentStock <= m.minimumThreshold AND m.isActive = TRUE")
+    @Query("SELECT m FROM Material m WHERE m.isActive = true AND LOWER(m.name) LIKE LOWER(CONCAT('%', :keyword, '%')) ORDER BY m.name ASC")
+    List<Material> searchByName(@Param("keyword") String keyword);
+
+    @Query("SELECT m FROM Material m WHERE m.isActive = true AND m.currentStock <= m.minimumThreshold ORDER BY m.currentStock ASC")
     List<Material> findLowStockMaterials();
 
-    /**
-     * LOW STOCK for a specific branch
-     */
-    @Query("SELECT m FROM Material m WHERE m.branchId = :branchId AND m.currentStock <= m.minimumThreshold AND m.isActive = TRUE")
-    List<Material> findLowStockByBranch(Long branchId);
+    @Query("SELECT m FROM Material m WHERE m.branchId = :branchId AND m.isActive = true AND m.currentStock <= m.minimumThreshold ORDER BY m.currentStock ASC")
+    List<Material> findLowStockByBranch(@Param("branchId") Long branchId);
 
-    /**
-     * Search by name keyword
-     */
-    @Query("SELECT m FROM Material m WHERE LOWER(m.name) LIKE LOWER(CONCAT('%', :keyword, '%')) AND m.isActive = TRUE")
-    List<Material> searchByName(String keyword);
+    @Query("SELECT m FROM Material m WHERE m.isActive = true AND m.currentStock = 0 ORDER BY m.name ASC")
+    List<Material> findOutOfStock();
+
+    @Query("SELECT m FROM Material m WHERE m.isActive = true AND LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(m.sku) LIKE LOWER(CONCAT('%', :search, '%')) ORDER BY m.name ASC")
+    List<Material> searchByNameOrSku(@Param("search") String search);
+
+    @Query("SELECT COUNT(m) FROM Material m WHERE m.isActive = true AND m.currentStock <= m.minimumThreshold")
+    long countLowStock();
+
+    @Query("SELECT m FROM Material m WHERE m.isActive = true AND m.currentStock <= m.minimumThreshold ORDER BY m.currentStock ASC")
+    List<Material> findLowStock();
 }

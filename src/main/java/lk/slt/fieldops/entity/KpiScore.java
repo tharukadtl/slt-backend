@@ -1,29 +1,45 @@
-package lk.slt.fieldops.kpi.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/**
- * KpiScore.java — maps to `kpi_scores` table.
- * One row per technician per day — written by nightly scheduler at 01:00 AM.
- */
+// Fields split into two groups:
+// - "legacy" fields used by KpiCalculationService (user, totalJobs, completionRate, etc.)
+// - "new" fields used by KpiService scheduler (technicianId, jobsAssigned, slaCompliancePercent, etc.)
+
 @Entity
-@Table(name = "kpi_scores")
+@Table(name = "kpi_scores",
+        indexes = {
+                @Index(name = "idx_kpi_score_tech",    columnList = "technician_id"),
+                @Index(name = "idx_kpi_score_period",  columnList = "period"),
+                @Index(name = "idx_kpi_score_date",    columnList = "score_date"),
+                @Index(name = "idx_kpi_score_branch",  columnList = "branch_id")
+        })
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class KpiScore {
 
-    public enum ScoredFor { TECHNICIAN, TEAM_LEAD, BRANCH }
+    public enum ScoredFor {
+        TECHNICIAN, TEAM_LEAD, BRANCH
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "score_date", nullable = false)
-    private LocalDate scoreDate;
-
+    // ─── Who this score is for ────────────────────────────
     @Enumerated(EnumType.STRING)
-    @Column(name = "scored_for", nullable = false, length = 12)
+    @Column(name = "scored_for", length = 20)
+    @Builder.Default
     private ScoredFor scoredFor = ScoredFor.TECHNICIAN;
 
     @Column(name = "technician_id")
@@ -35,66 +51,105 @@ public class KpiScore {
     @Column(name = "branch_id")
     private Long branchId;
 
+    // ─── Period ───────────────────────────────────────────
+    @Column(name = "period", nullable = false, length = 20)
+    private String period;
+
+    @Column(name = "score_date")
+    private LocalDate scoreDate;
+
+    // ─── Job Metrics ──────────────────────────────────────
     @Column(name = "jobs_assigned")
+    @Builder.Default
     private Integer jobsAssigned = 0;
 
     @Column(name = "jobs_completed")
+    @Builder.Default
     private Integer jobsCompleted = 0;
 
     @Column(name = "jobs_on_hold")
+    @Builder.Default
     private Integer jobsOnHold = 0;
 
     @Column(name = "jobs_cancelled")
+    @Builder.Default
     private Integer jobsCancelled = 0;
 
-    @Column(name = "avg_resolution_hours", precision = 8, scale = 2)
-    private BigDecimal avgResolutionHours;
-
     @Column(name = "sla_compliance_percent", precision = 5, scale = 2)
-    private BigDecimal slaCompliancePercent;
+    @Builder.Default
+    private BigDecimal slaCompliancePercent = BigDecimal.ZERO;
+
+    @Column(name = "avg_resolution_hours", precision = 6, scale = 2)
+    @Builder.Default
+    private BigDecimal avgResolutionHours = BigDecimal.ZERO;
 
     @Column(name = "avg_customer_rating", precision = 3, scale = 2)
-    private BigDecimal avgCustomerRating;
+    @Builder.Default
+    private BigDecimal avgCustomerRating = BigDecimal.ZERO;
 
-    @Column(name = "overall_score", precision = 5, scale = 2)
-    private BigDecimal overallScore;
+    // ─── Legacy fields (KpiCalculationService) ────────────
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "total_jobs")
+    @Builder.Default
+    private Long totalJobs = 0L;
+
+    @Column(name = "completed_jobs")
+    @Builder.Default
+    private Long completedJobs = 0L;
+
+    @Column(name = "completion_rate")
+    @Builder.Default
+    private Double completionRate = 0.0;
+
+    @Column(name = "avg_job_duration_hours")
+    @Builder.Default
+    private Double avgJobDurationHours = 0.0;
+
+    @Column(name = "avg_response_time_minutes")
+    @Builder.Default
+    private Double avgResponseTimeMinutes = 0.0;
+
+    @Column(name = "customer_satisfaction_score")
+    @Builder.Default
+    private Double customerSatisfactionScore = 0.0;
+
+    @Column(name = "on_time_completion_rate")
+    @Builder.Default
+    private Double onTimeCompletionRate = 0.0;
+
+    @Column(name = "total_revenue")
+    @Builder.Default
+    private Double totalRevenue = 0.0;
+
+    @Column(name = "attendance_rate")
+    @Builder.Default
+    private Double attendanceRate = 0.0;
+
+    @Column(name = "star_rating")
+    @Builder.Default
+    private Double starRating = 0.0;
+
+    // ─── Overall Score (Double for KpiCalculationService) ─
+    @Column(name = "overall_score")
+    @Builder.Default
+    private Double overallScore = 0.0;
+
+    @Column(name = "performance_level", length = 30)
+    private String performanceLevel;
+
+    // ─── Timestamps ───────────────────────────────────────
+    @Column(name = "calculated_at")
+    private LocalDateTime calculatedAt;
+
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @PrePersist
-    protected void onCreate() { this.createdAt = LocalDateTime.now(); }
-
-    public KpiScore() {}
-
-    public Long          getId()                    { return id; }
-    public LocalDate     getScoreDate()             { return scoreDate; }
-    public ScoredFor     getScoredFor()             { return scoredFor; }
-    public Long          getTechnicianId()          { return technicianId; }
-    public String        getTechnicianName()        { return technicianName; }
-    public Long          getBranchId()              { return branchId; }
-    public Integer       getJobsAssigned()          { return jobsAssigned; }
-    public Integer       getJobsCompleted()         { return jobsCompleted; }
-    public Integer       getJobsOnHold()            { return jobsOnHold; }
-    public Integer       getJobsCancelled()         { return jobsCancelled; }
-    public BigDecimal    getAvgResolutionHours()    { return avgResolutionHours; }
-    public BigDecimal    getSlaCompliancePercent()  { return slaCompliancePercent; }
-    public BigDecimal    getAvgCustomerRating()     { return avgCustomerRating; }
-    public BigDecimal    getOverallScore()          { return overallScore; }
-    public LocalDateTime getCreatedAt()             { return createdAt; }
-
-    public void setId(Long v)                        { this.id                   = v; }
-    public void setScoreDate(LocalDate v)            { this.scoreDate            = v; }
-    public void setScoredFor(ScoredFor v)            { this.scoredFor            = v; }
-    public void setTechnicianId(Long v)              { this.technicianId         = v; }
-    public void setTechnicianName(String v)          { this.technicianName       = v; }
-    public void setBranchId(Long v)                  { this.branchId             = v; }
-    public void setJobsAssigned(Integer v)           { this.jobsAssigned         = v; }
-    public void setJobsCompleted(Integer v)          { this.jobsCompleted        = v; }
-    public void setJobsOnHold(Integer v)             { this.jobsOnHold           = v; }
-    public void setJobsCancelled(Integer v)          { this.jobsCancelled        = v; }
-    public void setAvgResolutionHours(BigDecimal v)  { this.avgResolutionHours   = v; }
-    public void setSlaCompliancePercent(BigDecimal v){ this.slaCompliancePercent = v; }
-    public void setAvgCustomerRating(BigDecimal v)   { this.avgCustomerRating    = v; }
-    public void setOverallScore(BigDecimal v)        { this.overallScore         = v; }
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        calculatedAt = LocalDateTime.now();
+    }
 }

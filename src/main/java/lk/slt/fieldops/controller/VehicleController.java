@@ -1,10 +1,10 @@
-package lk.slt.fieldops.vehicle.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.vehicle.dto.CreateVehicleRequest;
-import lk.slt.fieldops.vehicle.entity.Vehicle;
-import lk.slt.fieldops.vehicle.entity.VehicleAssignment;
-import lk.slt.fieldops.vehicle.service.VehicleService;
+import lk.slt.fieldops.dto.CreateVehicleRequest;
+import lk.slt.fieldops.entity.Vehicle;
+import lk.slt.fieldops.entity.VehicleAssignment;
+import lk.slt.fieldops.service.VehicleService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -67,8 +67,8 @@ public class VehicleController {
         if (branchId != null) {
             return ResponseEntity.ok(vehicleService.getByBranch(branchId));
         }
-        // Return all — super admin only
-        return ResponseEntity.ok(vehicleService.getByBranch(null));
+        // Return all vehicles
+        return ResponseEntity.ok(vehicleService.getAll());
     }
 
     // ── GET ONE VEHICLE ───────────────────────────────────────────────────────

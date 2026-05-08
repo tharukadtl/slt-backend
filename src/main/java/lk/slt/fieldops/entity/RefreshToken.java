@@ -1,4 +1,4 @@
-package lk.slt.fieldops.auth.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;

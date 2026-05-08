@@ -1,12 +1,12 @@
-package lk.slt.fieldops.fault.service;
+package lk.slt.fieldops.service;
 
-import lk.slt.fieldops.fault.dto.*;
-import lk.slt.fieldops.fault.entity.Fault;
-import lk.slt.fieldops.fault.entity.FaultHistory;
-import lk.slt.fieldops.fault.entity.FaultNote;
-import lk.slt.fieldops.fault.repository.FaultHistoryRepository;
-import lk.slt.fieldops.fault.repository.FaultNoteRepository;
-import lk.slt.fieldops.fault.repository.FaultRepository;
+import lk.slt.fieldops.dto.*;
+import lk.slt.fieldops.entity.Fault;
+import lk.slt.fieldops.entity.FaultHistory;
+import lk.slt.fieldops.entity.FaultNote;
+import lk.slt.fieldops.repository.FaultHistoryRepository;
+import lk.slt.fieldops.repository.FaultNoteRepository;
+import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -231,6 +231,37 @@ public class FaultService {
                 .stream().map(this::mapToDTO).collect(Collectors.toList());
     }
 
+    @Transactional
+    public FaultDTO updateIssue(Long id, String category, String description,
+                                String locationAddress, Double latitude, Double longitude) {
+        Fault fault = findOrThrow(id);
+        if (fault.getStatus() == Fault.FaultStatus.COMPLETED ||
+            fault.getStatus() == Fault.FaultStatus.CANCELLED) {
+            throw new RuntimeException(
+                "Cannot update a " + fault.getStatus() + " issue.");
+        }
+        if (category != null) fault.setCategory(parseCategoryOrThrow(category));
+        if (description != null && !description.isBlank()) fault.setDescription(description);
+        if (locationAddress != null) fault.setLocationAddress(locationAddress);
+        if (latitude != null) fault.setLatitude(latitude);
+        if (longitude != null) fault.setLongitude(longitude);
+        return mapToDTO(faultRepo.save(fault));
+    }
+
+    @Transactional(readOnly = true)
+    public List<FaultDTO> getFaultsByTeamLead(Long teamLeadId) {
+        return faultRepo.findByAssignedTechnicianId(teamLeadId)
+                .stream().map(this::mapToDTO).collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<FaultDTO> getAllFaults() {
+        return faultRepo.findAll(
+                org.springframework.data.domain.Sort.by(
+                    org.springframework.data.domain.Sort.Direction.DESC, "reportedAt"))
+                .stream().map(this::mapToDTO).collect(Collectors.toList());
+    }
+
     @Transactional(readOnly = true)
     public List<FaultDTO> getOpenFaults() {
         return faultRepo.findAllOpenFaults()
@@ -285,15 +316,14 @@ public class FaultService {
                                FaultHistory.ChangedByRole role,
                                String reason) {
         FaultHistory h = new FaultHistory();
-        h.setFaultId(fault.getId());
+        h.setFault(fault);
         h.setFaultNumber(fault.getFaultNumber());
-        h.setOldStatus(oldStatus);
-        h.setNewStatus(newStatus);
-        h.setChangedById(changedById);
-        h.setChangedByName(changedByName);
-        h.setChangedByRole(role);
-        h.setReason(reason);
-        h.setIsSystemAction(false);
+        h.setEventType("STATUS_CHANGED");
+        h.setTitle("Status: " + (oldStatus != null ? oldStatus.name() : "?") + " → " + newStatus.name());
+        h.setDescription(changedByName + " [" + role + "]" + (reason != null && !reason.isBlank() ? ": " + reason : ""));
+        h.setPreviousValue(oldStatus != null ? oldStatus.name() : null);
+        h.setNewValue(newStatus.name());
+        h.setIsSystem(false);
         historyRepo.save(h);
     }
 

@@ -1,8 +1,8 @@
-package lk.slt.fieldops.inventory.service;
+package lk.slt.fieldops.service;
 
-import lk.slt.fieldops.inventory.dto.*;
-import lk.slt.fieldops.inventory.entity.*;
-import lk.slt.fieldops.inventory.repository.*;
+import lk.slt.fieldops.dto.*;
+import lk.slt.fieldops.entity.*;
+import lk.slt.fieldops.repository.*;
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

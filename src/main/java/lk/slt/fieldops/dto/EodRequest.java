@@ -1,6 +1,4 @@
-package lk.slt.fieldops.job.dto;
-
-import jakarta.validation.constraints.NotNull;
+package lk.slt.fieldops.dto;
 
 /**
  * EodRequest — Team Lead submits End of Day.
@@ -13,7 +11,6 @@ import jakarta.validation.constraints.NotNull;
  */
 public class EodRequest {
 
-    @NotNull(message = "Ending odometer reading is required")
     private Integer odometerEnd;
 
     private String notes;

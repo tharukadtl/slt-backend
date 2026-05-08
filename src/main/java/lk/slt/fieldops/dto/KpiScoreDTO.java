@@ -1,4 +1,4 @@
-package lk.slt.fieldops.kpi.dto;
+package lk.slt.fieldops.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

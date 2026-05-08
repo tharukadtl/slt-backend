@@ -16,13 +16,22 @@
     <artifactId>fieldops</artifactId>
     <version>1.0.0</version>
     <name>SLT Field Operations System</name>
-    <description>SLT After-Service Issue Management and Field Operations System</description>
+    <description>
+        SLT After-Service Issue Management and
+        Field Operations System
+    </description>
 
     <properties>
         <java.version>17</java.version>
+        <poi.version>5.2.5</poi.version>
+        <itext.version>8.0.3</itext.version>
     </properties>
 
     <dependencies>
+
+        <!-- ============================================== -->
+        <!-- CORE SPRING BOOT                               -->
+        <!-- ============================================== -->
 
         <!-- Spring Web — REST APIs -->
         <dependency>
@@ -48,6 +57,21 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- ============================================== -->
+        <!-- WEBSOCKET                                      -->
+        <!-- ============================================== -->
+
+        <!-- WebSocket — real-time location tracking,
+             live notifications, job status updates -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- DATABASE                                       -->
+        <!-- ============================================== -->
+
         <!-- MySQL Driver -->
         <dependency>
             <groupId>com.mysql</groupId>
@@ -55,44 +79,38 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Lombok — generates getters/setters/constructors at compile time -->
-        <!-- IMPORTANT: Must be declared BEFORE other dependencies that use it -->
+        <!-- ============================================== -->
+        <!-- LOMBOK                                         -->
+        <!-- ============================================== -->
+
+        <!-- Lombok — generates getters/setters/constructors
+             at compile time -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
 
-        <!-- JWT — JSON Web Tokens -->
-<!--        <dependency>-->
-<!--            <groupId>io.jsonwebtoken</groupId>-->
-<!--            <artifactId>jjwt-api</artifactId>-->
-<!--            <version>0.11.5</version>-->
-<!--        </dependency>-->
-<!--        <dependency>-->
-<!--            <groupId>io.jsonwebtoken</groupId>-->
-<!--            <artifactId>jjwt-impl</artifactId>-->
-<!--            <version>0.11.5</version>-->
-<!--            <scope>runtime</scope>-->
-<!--        </dependency>-->
-<!--        <dependency>-->
-<!--            <groupId>io.jsonwebtoken</groupId>-->
-<!--            <artifactId>jjwt-jackson</artifactId>-->
-<!--            <version>0.11.5</version>-->
-<!--            <scope>runtime</scope>-->
-<!--        </dependency>-->
+        <!-- ============================================== -->
+        <!-- JWT                                            -->
+        <!-- ============================================== -->
 
+        <!-- JWT API -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
-            <version>0.12.3</version> <!-- or latest -->
+            <version>0.12.3</version>
         </dependency>
-        <dependency> <!-- Runtime impl if needed, e.g., for Jackson -->
+
+        <!-- JWT Implementation -->
+        <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
             <version>0.12.3</version>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- JWT Jackson Integration -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
@@ -100,19 +118,127 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Swagger / OpenAPI — auto-generated API docs at /swagger-ui.html -->
+        <!-- ============================================== -->
+        <!-- JSON PROCESSING                                -->
+        <!-- ============================================== -->
+
+        <!-- Jackson Java 8 Date/Time support
+             Required for WebSocketMessage
+             LocalDateTime serialization -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- EXCEL EXPORT — NEW                             -->
+        <!-- ============================================== -->
+
+        <!-- Apache POI — Excel .xlsx generation
+             Used for: Fault reports, Payment exports,
+             Technician performance reports,
+             Inventory reports -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
+        <!-- Apache POI OOXML — required for .xlsx format
+             (Excel 2007+) -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- PDF EXPORT — NEW                               -->
+        <!-- ============================================== -->
+
+        <!-- iText Core — PDF generation
+             Used for: Payment receipts, Fault reports,
+             Technician performance PDFs,
+             Financial summaries -->
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>itext-core</artifactId>
+            <version>${itext.version}</version>
+            <type>pom</type>
+        </dependency>
+
+        <!-- iText Layout — tables, paragraphs,
+             headers, footers in PDF -->
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>layout</artifactId>
+            <version>${itext.version}</version>
+        </dependency>
+
+        <!-- iText Kernel — core PDF engine -->
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>kernel</artifactId>
+            <version>${itext.version}</version>
+        </dependency>
+
+        <!-- iText IO — font and image handling in PDF -->
+        <dependency>
+            <groupId>com.itextpdf</groupId>
+            <artifactId>io</artifactId>
+            <version>${itext.version}</version>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- FIREBASE PUSH NOTIFICATIONS                    -->
+        <!-- ============================================== -->
+
+        <!-- Firebase Admin SDK — FCM push notifications -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.2.0</version>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- API DOCUMENTATION                              -->
+        <!-- ============================================== -->
+
+        <!-- Swagger / OpenAPI — auto-generated API docs
+             accessible at /swagger-ui.html -->
         <dependency>
             <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <artifactId>
+                springdoc-openapi-starter-webmvc-ui
+            </artifactId>
             <version>2.3.0</version>
         </dependency>
 
-        <!-- Tests -->
+        <!-- ============================================== -->
+        <!-- MONITORING                                     -->
+        <!-- ============================================== -->
+
+        <!-- Spring Actuator — health check endpoints
+             at /actuator/health -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>
+                spring-boot-starter-actuator
+            </artifactId>
+        </dependency>
+
+        <!-- ============================================== -->
+        <!-- TESTING                                        -->
+        <!-- ============================================== -->
+
+        <!-- Spring Boot Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Spring Security Test -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
@@ -123,33 +249,50 @@
 
     <build>
         <plugins>
+
+            <!-- Spring Boot Maven Plugin -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
+                <artifactId>
+                    spring-boot-maven-plugin
+                </artifactId>
                 <configuration>
-                    <!-- THIS IS THE FIX: tells Maven to exclude Lombok from the final JAR
-                         but still run its annotation processor during compilation -->
+                    <!-- Exclude Lombok from final JAR
+                         but still run annotation processor
+                         during compilation -->
                     <excludes>
                         <exclude>
-                            <groupId>org.projectlombok</groupId>
+                            <groupId>
+                                org.projectlombok
+                            </groupId>
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
                 </configuration>
             </plugin>
 
-            <!-- THIS IS THE FIX: explicitly configure the annotation processor -->
+            <!-- Maven Compiler Plugin
+                 Explicitly configure Lombok
+                 annotation processor -->
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
+                <groupId>
+                    org.apache.maven.plugins
+                </groupId>
+                <artifactId>
+                    maven-compiler-plugin
+                </artifactId>
                 <configuration>
                     <source>17</source>
                     <target>17</target>
                     <annotationProcessorPaths>
                         <path>
-                            <groupId>org.projectlombok</groupId>
+                            <groupId>
+                                org.projectlombok
+                            </groupId>
                             <artifactId>lombok</artifactId>
-                            <version>${lombok.version}</version>
+                            <version>
+                                ${lombok.version}
+                            </version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

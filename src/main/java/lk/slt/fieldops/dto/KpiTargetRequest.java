@@ -1,4 +1,4 @@
-package lk.slt.fieldops.kpi.dto;
+package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;

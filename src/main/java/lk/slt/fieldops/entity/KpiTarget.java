@@ -1,67 +1,145 @@
-package lk.slt.fieldops.kpi.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-/**
- * KpiTarget.java — maps to `kpi_targets` table.
- * Admin sets monthly targets per branch.
- * KpiService compares actuals vs targets to compute scores.
- */
 @Entity
-@Table(name = "kpi_targets")
+@Table(name = "kpi_targets",
+        indexes = {
+                @Index(
+                        name = "idx_kpi_target_user",
+                        columnList = "user_id"),
+                @Index(
+                        name = "idx_kpi_target_period",
+                        columnList = "period"),
+                @Index(
+                        name = "idx_kpi_target_branch",
+                        columnList = "branch_id")
+        })
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class KpiTarget {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(
+            strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "branch_id")
+    // ─── Target Owner ─────────────────────────────────────
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
+    // ─── Assigned By ──────────────────────────────────────
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_by_id")
+    private User assignedBy;
+
+    // ─── Branch (for group targets) ───────────────────────
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "branch_id")
+    private Branch branch;
+
+    // ─── Target Details ───────────────────────────────────
+    @Column(name = "title",
+            nullable = false,
+            length = 200)
+    private String title;
+
+    @Column(name = "description",
+            length = 500)
+    private String description;
+
+    @Column(name = "target_value",
+            nullable = false)
+    private Double targetValue;
+
+    @Column(name = "current_value")
+    @Builder.Default
+    private Double currentValue = 0.0;
+
+    @Column(name = "unit",
+            length = 50)
+    private String unit;
+
+    // ─── Classification ───────────────────────────────────
+    @Column(name = "period",
+            nullable = false,
+            length = 20)
+    private String period;
+
+    @Column(name = "category",
+            length = 30)
+    private String category;
+
+    // ─── Dates ────────────────────────────────────────────
+    @Column(name = "due_date")
+    private LocalDate dueDate;
+
+    @Column(name = "start_date")
+    private LocalDate startDate;
+
+    // ─── Status ───────────────────────────────────────────
+    @Column(name = "status",
+            length = 30)
+    @Builder.Default
+    private String status = "ON_TRACK";
+
+    @Column(name = "is_group_target")
+    @Builder.Default
+    private Boolean isGroupTarget = false;
+
+    @Column(name = "is_active")
+    @Builder.Default
+    private Boolean isActive = true;
+
+    // ─── Branch-level monthly target fields ───────────────
+    @Column(name = "kpi_branch_id")
     private Long branchId;
 
-    @Column(name = "target_year", nullable = false)
+    @Column(name = "target_year")
     private Integer targetYear;
 
-    @Column(name = "target_month", nullable = false)
+    @Column(name = "target_month")
     private Integer targetMonth;
 
-    @Column(name = "min_jobs_per_day", nullable = false)
-    private Integer minJobsPerDay = 3;
+    @Column(name = "min_jobs_per_day")
+    private Integer minJobsPerDay;
 
-    @Column(name = "target_sla_compliance", nullable = false, precision = 5, scale = 2)
-    private BigDecimal targetSlaCompliance = new BigDecimal("95.00");
+    @Column(name = "target_sla_compliance", precision = 5, scale = 2)
+    private BigDecimal targetSlaCompliance;
 
-    @Column(name = "target_customer_rating", nullable = false, precision = 3, scale = 2)
-    private BigDecimal targetCustomerRating = new BigDecimal("4.00");
+    @Column(name = "target_customer_rating", precision = 3, scale = 2)
+    private BigDecimal targetCustomerRating;
 
-    @Column(name = "max_avg_resolution_hours", nullable = false, precision = 8, scale = 2)
-    private BigDecimal maxAvgResolutionHours = new BigDecimal("24.00");
+    @Column(name = "max_avg_resolution_hours", precision = 6, scale = 2)
+    private BigDecimal maxAvgResolutionHours;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    // ─── Timestamps ───────────────────────────────────────
+    @Column(name = "created_at",
+            updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
     @PrePersist
-    protected void onCreate() { this.createdAt = LocalDateTime.now(); }
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
 
-    public KpiTarget() {}
-
-    public Long          getId()                       { return id; }
-    public Long          getBranchId()                 { return branchId; }
-    public Integer       getTargetYear()               { return targetYear; }
-    public Integer       getTargetMonth()              { return targetMonth; }
-    public Integer       getMinJobsPerDay()            { return minJobsPerDay; }
-    public BigDecimal    getTargetSlaCompliance()      { return targetSlaCompliance; }
-    public BigDecimal    getTargetCustomerRating()     { return targetCustomerRating; }
-    public BigDecimal    getMaxAvgResolutionHours()    { return maxAvgResolutionHours; }
-    public LocalDateTime getCreatedAt()                { return createdAt; }
-
-    public void setId(Long v)                           { this.id                    = v; }
-    public void setBranchId(Long v)                     { this.branchId              = v; }
-    public void setTargetYear(Integer v)                { this.targetYear            = v; }
-    public void setTargetMonth(Integer v)               { this.targetMonth           = v; }
-    public void setMinJobsPerDay(Integer v)             { this.minJobsPerDay         = v; }
-    public void setTargetSlaCompliance(BigDecimal v)    { this.targetSlaCompliance   = v; }
-    public void setTargetCustomerRating(BigDecimal v)   { this.targetCustomerRating  = v; }
-    public void setMaxAvgResolutionHours(BigDecimal v)  { this.maxAvgResolutionHours = v; }
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

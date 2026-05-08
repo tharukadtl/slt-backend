@@ -1,6 +1,6 @@
-package lk.slt.fieldops.vehicle.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.vehicle.entity.VehicleAssignment;
+import lk.slt.fieldops.entity.VehicleAssignment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.time.LocalDate;

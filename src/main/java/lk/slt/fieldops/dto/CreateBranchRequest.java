@@ -1,8 +1,8 @@
-package lk.slt.fieldops.branch.dto;
+package lk.slt.fieldops.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -26,21 +26,19 @@ import jakarta.validation.constraints.Size;
  *   "longitude":  79.8658
  * }
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class CreateBranchRequest {
 
     @NotBlank(message = "Branch name is required")
     @Size(max = 150, message = "Name cannot exceed 150 characters")
     private String name;
 
-    @NotBlank(message = "Branch code is required")
-    @Pattern(regexp = "^[A-Z]{2,5}-[0-9]{2}$",
-             message = "Code must be in format: ABC-01 (e.g. CMB-01)")
     private String code;
+    private String region;
 
     // Optional fields — no @NotBlank
     private String branchType;   // REGIONAL_OFFICE / DISTRICT_CENTER / LOCAL_BRANCH
 
-    @NotBlank(message = "Address is required")
     @Size(max = 500)
     private String address;
 
@@ -66,6 +64,7 @@ public class CreateBranchRequest {
     // Getters
     public String getName()             { return name; }
     public String getCode()             { return code; }
+    public String getRegion()           { return region; }
     public String getBranchType()       { return branchType; }
     public String getAddress()          { return address; }
     public String getCity()             { return city; }
@@ -85,6 +84,7 @@ public class CreateBranchRequest {
     // Setters
     public void setName(String v)              { this.name             = v; }
     public void setCode(String v)              { this.code             = v; }
+    public void setRegion(String v)            { this.region           = v; }
     public void setBranchType(String v)        { this.branchType       = v; }
     public void setAddress(String v)           { this.address          = v; }
     public void setCity(String v)              { this.city             = v; }

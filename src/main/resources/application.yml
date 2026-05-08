@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/slt_fieldops_db?useSSL=false&serverTimezone=Asia/Colombo&allowPublicKeyRetrieval=true
-    username: root
-    password: 1234
+    url: jdbc:mysql://mysql-146c8b6d-ckwahalathanthri-74bf.k.aivencloud.com:12895/slt_wfms?ssl-mode=REQUIRED&serverTimezone=Asia/Colombo&allowPublicKeyRetrieval=true
+    username: avnadmin
+    password: AVNS_WUhMetrh8WzhAxov80Q
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
@@ -16,25 +16,140 @@ spring:
 
   jackson:
     time-zone: Asia/Colombo
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  websocket:
+    message-size-limit: 8192
+    send-buffer-size-limit: 512000
+    send-time-limit: 20000
 
 server:
   port: 8080
 
-# ── THIS IS WHAT WAS MISSING ──────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════
+# APP CONFIG
+# ══════════════════════════════════════════════════════════
 app:
+
+  # ── JWT ─────────────────────────────────────────────────
   jwt:
     secret: SLT-FieldOps-JWT-Secret-Key-2026-LLCSX25311-Tharuka-Very-Long-Secure-Key-Min-64-Chars
-    access-token-expiry-ms: 1800000      # 30 minutes
-    refresh-token-expiry-ms: 604800000   # 7 days
+    access-token-expiry-ms: 1800000        # 30 minutes
+    refresh-token-expiry-ms: 604800000     # 7 days
+
+  # ── OTP ─────────────────────────────────────────────────
   otp:
     expiry-minutes: 5
     max-attempts: 3
-  sms:
-    enabled: false       # false = OTP prints to console. Set true only when you have real SMS.
-    provider: mock
-# ─────────────────────────────────────────────────────────────────────────────
 
+  # ── SMS ─────────────────────────────────────────────────
+  sms:
+    enabled: false
+    provider: mock
+
+  # ── Firebase Push Notifications ─────────────────────────
+  firebase:
+    credentials-path: src/main/resources/firebase/serviceAccountKey.json
+    enabled: false          # true when serviceAccountKey.json is added
+    project-id: slt-fieldops
+
+  # ── WebSocket ────────────────────────────────────────────
+  websocket:
+    location-endpoint: /ws/location
+    notification-endpoint: /ws/notifications
+    allowed-origins: "*"
+
+  # ── CORS ─────────────────────────────────────────────────
+  cors:
+    allowed-origins:
+      - http://localhost:3000    # React Admin Portal
+      - http://localhost:3001    # Alternative React port
+      - http://localhost:8081    # Alternative API port
+      - http://localhost:19000   # React Native Expo
+      - http://localhost:19001   # React Native Expo tunnel
+      - http://10.0.2.2:8080    # Android Emulator → localhost
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
+      - OPTIONS
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
+
+  # ── Stock Alerts ─────────────────────────────────────────
+  stock:
+    low-stock-check-interval-minutes: 30
+    alert-enabled: true
+
+  # ── Reports ──────────────────────────────────────────────
+  reports:
+    export-dir: temp/reports
+    max-export-days: 90
+
+  # ── KPI ──────────────────────────────────────────────────
+  kpi:
+    calculation-interval-hours: 1
+    leaderboard-cache-minutes: 15
+
+  # ── Location ─────────────────────────────────────────────
+  location:
+    active-threshold-minutes: 30
+    update-interval-seconds: 30
+
+# ══════════════════════════════════════════════════════════
+# LOGGING
+# ══════════════════════════════════════════════════════════
 logging:
   level:
     lk.slt.fieldops: DEBUG
+    lk.slt.fieldops.websocket: DEBUG
+    lk.slt.fieldops.service: DEBUG
+    lk.slt.fieldops.controller: INFO
     org.springframework.security: INFO
+    org.springframework.web.socket: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/slt-fieldops.log
+    max-size: 10MB
+    max-history: 30
+
+# ══════════════════════════════════════════════════════════
+# ACTUATOR — Health Monitoring
+# ══════════════════════════════════════════════════════════
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, env
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+# ══════════════════════════════════════════════════════════
+# APP INFO (shown at /actuator/info)
+# ══════════════════════════════════════════════════════════
+info:
+  app:
+    name: SLT Field Operations System
+    version: 1.0.0
+    description: >
+      SLT After-Service Issue Management
+      and Field Operations System
+    student: Tharuka Liyanaarachchi
+    id: LLCSX25311
+  contact:
+    email: support@slt.lk
+    phone: +94 11 2300000

@@ -1,100 +1,121 @@
-package lk.slt.fieldops.job.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
-/**
- * CheckInOut.java — maps to `check_in_out` table.
- * Records vehicle check-in at BOD and check-out at EOD.
- */
 @Entity
-@Table(name = "check_in_out")
+@Table(name = "check_in_out",
+        indexes = {
+                @Index(
+                        name = "idx_checkinout_user",
+                        columnList = "user_id"),
+                @Index(
+                        name = "idx_checkinout_time",
+                        columnList = "check_in_time"),
+                @Index(
+                        name = "idx_checkinout_status",
+                        columnList = "status")
+        })
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CheckInOut {
 
-    public enum CheckType { CHECK_IN, CHECK_OUT }
-
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(
+            strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "session_id", nullable = false)
+    // ─── User Reference ───────────────────────────────────
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id",
+            nullable = false)
+    private User user;
+
+    // ─── Check-In ─────────────────────────────────────────
+    @Column(name = "check_in_time")
+    private LocalDateTime checkInTime;
+
+    @Column(name = "check_in_latitude")
+    private Double checkInLatitude;
+
+    @Column(name = "check_in_longitude")
+    private Double checkInLongitude;
+
+    @Column(name = "check_in_address",
+            length = 500)
+    private String checkInAddress;
+
+    // ─── Check-Out ────────────────────────────────────────
+    @Column(name = "check_out_time")
+    private LocalDateTime checkOutTime;
+
+    @Column(name = "check_out_latitude")
+    private Double checkOutLatitude;
+
+    @Column(name = "check_out_longitude")
+    private Double checkOutLongitude;
+
+    @Column(name = "check_out_address",
+            length = 500)
+    private String checkOutAddress;
+
+    // ─── Day Session Link (nullable — individual tech check-ins have no session) ─
+    @Column(name = "session_id")
     private Long sessionId;
 
-    @Column(name = "team_lead_id", nullable = false)
+    // ─── Team Lead Link (nullable — technician self-check-ins have no TL) ──────
+    @Column(name = "team_lead_id")
     private Long teamLeadId;
 
-    @Column(name = "team_lead_name", length = 150)
-    private String teamLeadName;
+    // ─── Check type — BOD (team lead) or ATTENDANCE (individual) ─────────────
+    @Column(name = "check_type", length = 20, nullable = false)
+    @Builder.Default
+    private String checkType = "ATTENDANCE";
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "check_type", nullable = false, length = 15)
-    private CheckType checkType;
+    // ─── Session Info ─────────────────────────────────────
+    @Column(name = "status",
+            length = 30)
+    @Builder.Default
+    private String status = "CHECKED_IN";
 
-    @Column(name = "check_time", nullable = false)
-    private LocalDateTime checkTime;
+    @Column(name = "jobs_completed")
+    private Integer jobsCompleted;
 
-    @Column(name = "latitude")
-    private Double latitude;
-
-    @Column(name = "longitude")
-    private Double longitude;
-
-    @Column(name = "location_address", length = 300)
-    private String locationAddress;
-
-    @Column(name = "vehicle_id")
-    private Long vehicleId;
-
-    @Column(name = "vehicle_number", length = 20)
-    private String vehicleNumber;
-
-    @Column(name = "odometer_reading")
-    private Integer odometerReading;
-
-    @Column(name = "fuel_level_percent")
-    private Integer fuelLevelPercent;
-
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "notes",
+            length = 1000)
     private String notes;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "device_info",
+            length = 200)
+    private String deviceInfo;
+
+    // ─── Timestamps ───────────────────────────────────────
+    @Column(name = "created_at",
+            updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
+
+    // ─── Lifecycle ────────────────────────────────────────
     @PrePersist
-    protected void onCreate() { this.createdAt = LocalDateTime.now(); }
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+        if (checkInTime == null) {
+            checkInTime = LocalDateTime.now();
+        }
+    }
 
-    public CheckInOut() {}
-
-    // Getters
-    public Long          getId()             { return id; }
-    public Long          getSessionId()      { return sessionId; }
-    public Long          getTeamLeadId()     { return teamLeadId; }
-    public String        getTeamLeadName()   { return teamLeadName; }
-    public CheckType     getCheckType()      { return checkType; }
-    public LocalDateTime getCheckTime()      { return checkTime; }
-    public Double        getLatitude()       { return latitude; }
-    public Double        getLongitude()      { return longitude; }
-    public String        getLocationAddress(){ return locationAddress; }
-    public Long          getVehicleId()      { return vehicleId; }
-    public String        getVehicleNumber()  { return vehicleNumber; }
-    public Integer       getOdometerReading(){ return odometerReading; }
-    public Integer       getFuelLevelPercent(){ return fuelLevelPercent; }
-    public String        getNotes()          { return notes; }
-    public LocalDateTime getCreatedAt()      { return createdAt; }
-
-    // Setters
-    public void setId(Long v)                    { this.id              = v; }
-    public void setSessionId(Long v)             { this.sessionId       = v; }
-    public void setTeamLeadId(Long v)            { this.teamLeadId      = v; }
-    public void setTeamLeadName(String v)        { this.teamLeadName    = v; }
-    public void setCheckType(CheckType v)        { this.checkType       = v; }
-    public void setCheckTime(LocalDateTime v)    { this.checkTime       = v; }
-    public void setLatitude(Double v)            { this.latitude        = v; }
-    public void setLongitude(Double v)           { this.longitude       = v; }
-    public void setLocationAddress(String v)     { this.locationAddress = v; }
-    public void setVehicleId(Long v)             { this.vehicleId       = v; }
-    public void setVehicleNumber(String v)       { this.vehicleNumber   = v; }
-    public void setOdometerReading(Integer v)    { this.odometerReading = v; }
-    public void setFuelLevelPercent(Integer v)   { this.fuelLevelPercent= v; }
-    public void setNotes(String v)               { this.notes           = v; }
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
 }

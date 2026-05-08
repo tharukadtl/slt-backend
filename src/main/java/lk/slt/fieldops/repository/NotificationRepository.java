@@ -1,6 +1,6 @@
-package lk.slt.fieldops.notification.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.notification.entity.Notification;
+import lk.slt.fieldops.entity.Notification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

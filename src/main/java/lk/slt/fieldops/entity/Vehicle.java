@@ -1,4 +1,4 @@
-package lk.slt.fieldops.vehicle.entity;
+package lk.slt.fieldops.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @Table(name = "vehicles")
 public class Vehicle {
 
-    public enum VehicleStatus { ACTIVE, INACTIVE, UNDER_MAINTENANCE }
+    public enum VehicleStatus { AVAILABLE, IN_USE, UNDER_REPAIR, INACTIVE }
     public enum FuelType { PETROL, DIESEL, ELECTRIC, HYBRID }
     public enum VehicleType { VAN, CAR, MOTORCYCLE, TRUCK, OTHER }
 
@@ -48,7 +48,7 @@ public class Vehicle {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private VehicleStatus status = VehicleStatus.ACTIVE;
+    private VehicleStatus status = VehicleStatus.AVAILABLE;
 
     @Column(name = "current_odometer")
     private Integer currentOdometer = 0;

@@ -1,11 +1,14 @@
-package lk.slt.fieldops.payment.controller;
+package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
-import lk.slt.fieldops.payment.dto.ReviewPaymentRequest;
-import lk.slt.fieldops.payment.dto.SubmitPaymentRequest;
-import lk.slt.fieldops.payment.entity.Payment;
-import lk.slt.fieldops.payment.entity.PaymentApproval;
-import lk.slt.fieldops.payment.service.PaymentService;
+import lk.slt.fieldops.dto.ClientBillDTO;
+import lk.slt.fieldops.dto.ReviewPaymentRequest;
+import lk.slt.fieldops.dto.SubmitPaymentRequest;
+import lk.slt.fieldops.entity.Payment;
+import lk.slt.fieldops.entity.PaymentApproval;
+import lk.slt.fieldops.entity.User;
+import lk.slt.fieldops.repository.UserRepository;
+import lk.slt.fieldops.service.PaymentService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -13,6 +16,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * PaymentController — billing workflow endpoints.
@@ -31,9 +35,17 @@ import java.util.List;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final UserRepository userRepo;
 
-    public PaymentController(PaymentService paymentService) {
+    public PaymentController(PaymentService paymentService, UserRepository userRepo) {
         this.paymentService = paymentService;
+        this.userRepo       = userRepo;
+    }
+
+    private String resolveFullName(Long userId) {
+        return userRepo.findById(userId)
+            .map(User::getFullName)
+            .orElse("User #" + userId);
     }
 
     @PostMapping
@@ -42,7 +54,7 @@ public class PaymentController {
             @Valid @RequestBody SubmitPaymentRequest request,
             @AuthenticationPrincipal Long userId) {
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(paymentService.submitPayment(request, userId, "Team Lead #" + userId));
+            .body(paymentService.submitPayment(request, userId, resolveFullName(userId)));
     }
 
     @GetMapping("/{id}")
@@ -55,6 +67,12 @@ public class PaymentController {
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<Payment>> getPending() {
         return ResponseEntity.ok(paymentService.getPendingPayments());
+    }
+
+    @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<Payment>> getAll() {
+        return ResponseEntity.ok(paymentService.getAll());
     }
 
     @GetMapping("/branch/{branchId}")
@@ -74,6 +92,16 @@ public class PaymentController {
         return ResponseEntity.ok(paymentService.getForCustomer(customerId));
     }
 
+    /** Client: view their own bills (no customerId needed — resolved from JWT) */
+    @GetMapping("/my-bills")
+    @PreAuthorize("hasRole('CLIENT')")
+    public ResponseEntity<List<ClientBillDTO>> getMyBills(@AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(
+            paymentService.getForCustomer(userId).stream()
+                .map(ClientBillDTO::from)
+                .collect(Collectors.toList()));
+    }
+
     @PatchMapping("/{id}/review")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Payment> review(
@@ -81,7 +109,7 @@ public class PaymentController {
             @Valid @RequestBody ReviewPaymentRequest request,
             @AuthenticationPrincipal Long adminId) {
         return ResponseEntity.ok(
-            paymentService.reviewPayment(id, request, adminId, "Admin #" + adminId));
+            paymentService.reviewPayment(id, request, adminId, resolveFullName(adminId)));
     }
 
     @GetMapping("/{id}/approvals")

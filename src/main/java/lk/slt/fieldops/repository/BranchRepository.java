@@ -1,6 +1,6 @@
-package lk.slt.fieldops.branch.repository;
+package lk.slt.fieldops.repository;
 
-import lk.slt.fieldops.branch.entity.Branch;
+import lk.slt.fieldops.entity.Branch;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
