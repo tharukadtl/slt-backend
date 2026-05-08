@@ -1,0 +1,88 @@
+2026-05-08 00:42:01 [main] INFO  lk.slt.fieldops.Application - Starting Application using Java 17.0.11 with PID 20916 (C:\Project\slt\fieldops\target\classes started by lenovo in C:\Project\slt\fieldops)
+2026-05-08 00:42:02 [main] DEBUG lk.slt.fieldops.Application - Running with Spring Boot v3.2.3, Spring v6.1.4
+2026-05-08 00:42:02 [main] INFO  lk.slt.fieldops.Application - No active profile set, falling back to 1 default profile: "default"
+2026-05-08 00:42:03 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-08 00:42:03 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 228 ms. Found 24 JPA repository interfaces.
+2026-05-08 00:42:04 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-05-08 00:42:04 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-05-08 00:42:04 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.19]
+2026-05-08 00:42:04 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-05-08 00:42:04 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 2804 ms
+2026-05-08 00:42:05 [main] DEBUG l.s.fieldops.config.SecurityConfig$1 - Filter 'jwtAuthFilter' configured for use
+2026-05-08 00:42:05 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-05-08 00:42:05 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 6.4.4.Final
+2026-05-08 00:42:05 [main] INFO  o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
+2026-05-08 00:42:05 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-08 00:42:05 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-05-08 00:42:07 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@38ad86b1
+2026-05-08 00:42:07 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-05-08 00:42:07 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(12, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@430f0c63) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@25a52a60)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(-9, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@15549dd7) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@1e75af65)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(-3, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@25a2c4dc) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@29d81c22)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4003, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@18d396eb) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@2bee1c13)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4001, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@1859b996) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@71098fb3)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4002, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@75e92bb7) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@2ebcbf9d)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2004, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@7bfc36d5) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@46b55a0e)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2005, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@7abd75fc) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@31b67d61)
+2026-05-08 00:42:07 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2011, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@2b66bf1c) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@47eff554)
+2026-05-08 00:42:09 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-08 00:42:14 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-08 00:42:15 [main] INFO  l.slt.fieldops.config.FirebaseConfig - Firebase disabled â€” push notifications will not be sent
+2026-05-08 00:42:15 [main] INFO  o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-05-08 00:42:17 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-05-08 00:42:17 [main] WARN  o.s.b.a.s.s.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: e8c4d421-fd50-432e-8c90-10e4a0b6af4f
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-08 00:42:18 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 4 endpoint(s) beneath base path '/actuator'
+2026-05-08 00:42:18 [main] INFO  o.s.s.web.DefaultSecurityFilterChain - Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@3446bba2, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@486765f1, org.springframework.security.web.context.SecurityContextHolderFilter@5a2dbab3, org.springframework.security.web.header.HeaderWriterFilter@eb89a4b, org.springframework.web.filter.CorsFilter@73b3dfe9, org.springframework.security.web.authentication.logout.LogoutFilter@4e40b9e8, lk.slt.fieldops.config.SecurityConfig$1@69d2fb0a, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@371ff4ba, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@9247cfe, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@59ea19a4, org.springframework.security.web.session.SessionManagementFilter@749a0f3b, org.springframework.security.web.access.ExceptionTranslationFilter@4537e60e, org.springframework.security.web.access.intercept.AuthorizationFilter@2acdacf3]
+2026-05-08 00:42:19 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path ''
+2026-05-08 00:42:19 [main] INFO  lk.slt.fieldops.Application - Started Application in 18.128 seconds (process running for 19.026)
+2026-05-08 00:42:20 [RMI TCP Connection(3)-10.225.157.30] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-05-08 00:42:20 [RMI TCP Connection(3)-10.225.157.30] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-05-08 00:42:20 [RMI TCP Connection(3)-10.225.157.30] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 3 ms
+2026-05-08 00:42:41 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-08 00:42:41 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-05-08 00:42:43 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-05-08 00:43:24 [main] INFO  lk.slt.fieldops.ApplicationTests - Starting ApplicationTests using Java 17.0.11 with PID 8784 (started by lenovo in C:\Project\slt\fieldops)
+2026-05-08 00:43:24 [main] DEBUG lk.slt.fieldops.ApplicationTests - Running with Spring Boot v3.2.3, Spring v6.1.4
+2026-05-08 00:43:24 [main] INFO  lk.slt.fieldops.ApplicationTests - No active profile set, falling back to 1 default profile: "default"
+2026-05-08 00:43:26 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-05-08 00:43:26 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 184 ms. Found 24 JPA repository interfaces.
+2026-05-08 00:43:27 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-05-08 00:43:28 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 6.4.4.Final
+2026-05-08 00:43:28 [main] INFO  o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
+2026-05-08 00:43:28 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-05-08 00:43:28 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-05-08 00:43:30 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@e3692ca
+2026-05-08 00:43:30 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-05-08 00:43:30 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(12, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@1eee9b78) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@36762234)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(-9, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@18ff753c) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@2ff62720)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(-3, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@45295cfd) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@42c9b1ee)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4003, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@217c6a1e) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@3fad8636)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4001, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@306cfb8a) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@3fa57aa8)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4002, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@7d4bdbd8) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@2e847e71)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2004, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@79636080) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@6d87253e)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2005, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@4e31b64d) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@434b2e0c)
+2026-05-08 00:43:30 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2011, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@214e3185) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@75345e47)
+2026-05-08 00:43:32 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-05-08 00:43:36 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-05-08 00:43:36 [main] INFO  l.slt.fieldops.config.FirebaseConfig - Firebase disabled — push notifications will not be sent
+2026-05-08 00:43:37 [main] INFO  o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-05-08 00:43:39 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-05-08 00:43:39 [main] WARN  o.s.b.a.s.s.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 169028d2-2a43-4685-bbf7-8bc2585451f4
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-05-08 00:43:40 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 4 endpoint(s) beneath base path '/actuator'
+2026-05-08 00:43:41 [main] INFO  o.s.s.web.DefaultSecurityFilterChain - Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@69c04cda, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@7cbe3c73, org.springframework.security.web.context.SecurityContextHolderFilter@54bd2345, org.springframework.security.web.header.HeaderWriterFilter@b0d8d4a, org.springframework.web.filter.CorsFilter@44eab1b0, org.springframework.security.web.authentication.logout.LogoutFilter@dac317c, lk.slt.fieldops.config.SecurityConfig$1@ef3796c, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@47f76ade, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@5daf5ea5, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@4627cd63, org.springframework.security.web.session.SessionManagementFilter@472e1f2f, org.springframework.security.web.access.ExceptionTranslationFilter@5078a01e, org.springframework.security.web.access.intercept.AuthorizationFilter@a98a875]
+2026-05-08 00:43:42 [main] INFO  lk.slt.fieldops.ApplicationTests - Started ApplicationTests in 18.36 seconds (process running for 19.852)
+2026-05-08 00:43:43 [SpringApplicationShutdownHook] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-05-08 00:43:43 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-05-08 00:43:44 [SpringApplicationShutdownHook] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.

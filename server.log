@@ -1,0 +1,422 @@
+[INFO] Scanning for projects...
+Downloading from central: https://repo.maven.apache.org/maven2/org/jooq/maven-metadata.xml
+Downloading from central: https://repo.maven.apache.org/maven2/io/github/git-commit-id/maven-metadata.xml
+Downloading from central: https://repo.maven.apache.org/maven2/org/springframework/boot/maven-metadata.xml
+Downloading from central: https://repo.maven.apache.org/maven2/org/flywaydb/maven-metadata.xml
+Progress (1): 234 BProgress (2): 234 B | 398 B                           Downloaded from central: https://repo.maven.apache.org/maven2/org/flywaydb/maven-metadata.xml (234 B at 295 B/s)
+Downloaded from central: https://repo.maven.apache.org/maven2/org/jooq/maven-metadata.xml (398 B at 501 B/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/maven-metadata.xml
+Downloading from central: https://repo.maven.apache.org/maven2/org/liquibase/maven-metadata.xml
+Progress (1): 255 BProgress (2): 255 B | 249 B                           Downloaded from central: https://repo.maven.apache.org/maven2/io/github/git-commit-id/maven-metadata.xml (255 B at 309 B/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/graalvm/buildtools/maven-metadata.xml
+Downloaded from central: https://repo.maven.apache.org/maven2/org/springframework/boot/maven-metadata.xml (249 B at 301 B/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-metadata.xml
+Progress (1): 375 BProgress (2): 375 B | 394 B                           Downloaded from central: https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/maven-metadata.xml (375 B at 4.8 kB/s)
+Downloading from central: https://repo.maven.apache.org/maven2/org/codehaus/mojo/maven-metadata.xml
+Downloaded from central: https://repo.maven.apache.org/maven2/org/liquibase/maven-metadata.xml (394 B at 5.1 kB/s)
+Progress (1): 4.6 kBProgress (1): 9.7 kBProgress (1): 14 kB                    Downloaded from central: https://repo.maven.apache.org/maven2/org/apache/maven/plugins/maven-metadata.xml (14 kB at 160 kB/s)
+Progress (1): 3.1 kBProgress (1): 7.7 kBProgress (1): 12 kB Progress (1): 17 kBProgress (1): 20 kBProgress (1): 21 kB                   Downloaded from central: https://repo.maven.apache.org/maven2/org/codehaus/mojo/maven-metadata.xml (21 kB at 133 kB/s)
+Progress (1): 242 B                   Downloaded from central: https://repo.maven.apache.org/maven2/org/graalvm/buildtools/maven-metadata.xml (242 B at 960 B/s)
+[INFO] 
+[INFO] --------------------------< lk.slt:fieldops >---------------------------
+[INFO] Building SLT Field Operations System 1.0.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] >>> spring-boot:3.2.3:run (default-cli) > test-compile @ fieldops >>>
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ fieldops ---
+[INFO] Copying 1 resource from src\main\resources to target\classes
+[INFO] Copying 0 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ fieldops ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ fieldops ---
+[INFO] skip non existing resourceDirectory C:\Project\slt\fieldops\src\test\resources
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ fieldops ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] <<< spring-boot:3.2.3:run (default-cli) < test-compile @ fieldops <<<
+[INFO] 
+[INFO] 
+[INFO] --- spring-boot:3.2.3:run (default-cli) @ fieldops ---
+[INFO] Attaching agents: []
+Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.3)
+
+2026-04-28 05:35:05 [main] INFO  lk.slt.fieldops.Application - Starting Application using Java 17.0.11 with PID 24720 (C:\Project\slt\fieldops\target\classes started by lenovo in C:\Project\slt\fieldops)
+2026-04-28 05:35:05 [main] DEBUG lk.slt.fieldops.Application - Running with Spring Boot v3.2.3, Spring v6.1.4
+2026-04-28 05:35:05 [main] INFO  lk.slt.fieldops.Application - No active profile set, falling back to 1 default profile: "default"
+2026-04-28 05:35:07 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-04-28 05:35:08 [main] INFO  o.s.d.r.c.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 221 ms. Found 24 JPA repository interfaces.
+2026-04-28 05:35:09 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-04-28 05:35:09 [main] INFO  o.a.catalina.core.StandardService - Starting service [Tomcat]
+2026-04-28 05:35:09 [main] INFO  o.a.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/10.1.19]
+2026-04-28 05:35:10 [main] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring embedded WebApplicationContext
+2026-04-28 05:35:10 [main] INFO  o.s.b.w.s.c.ServletWebServerApplicationContext - Root WebApplicationContext: initialization completed in 4288 ms
+Standard Commons Logging discovery in action with spring-jcl: please remove commons-logging.jar from classpath in order to avoid potential conflicts
+2026-04-28 05:35:10 [main] DEBUG l.s.fieldops.config.SecurityConfig$1 - Filter 'jwtAuthFilter' configured for use
+2026-04-28 05:35:10 [main] INFO  o.h.jpa.internal.util.LogHelper - HHH000204: Processing PersistenceUnitInfo [name: default]
+2026-04-28 05:35:11 [main] INFO  org.hibernate.Version - HHH000412: Hibernate ORM core version 6.4.4.Final
+2026-04-28 05:35:11 [main] INFO  o.h.c.i.RegionFactoryInitiator - HHH000026: Second-level cache disabled
+2026-04-28 05:35:11 [main] INFO  o.s.o.j.p.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-04-28 05:35:11 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-04-28 05:35:12 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection com.mysql.cj.jdbc.ConnectionImpl@52bb3dcd
+2026-04-28 05:35:12 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-04-28 05:35:12 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: MySQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(12, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@62aee901) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@1983a4e4)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(-9, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@29b4444a) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@3ce7a354)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(-3, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@2914a328) replaced previous registration(org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@2d34866a)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4003, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@26291192) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@27d5eb00)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4001, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@2b540131) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@225ac5e7)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(4002, org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@4c91f5bf) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@44948ac6)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2004, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@4fc256ec) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@3bc3d70e)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2005, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@78bce1c4) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@189e96af)
+2026-04-28 05:35:12 [main] DEBUG o.h.t.d.sql.spi.DdlTypeRegistry - addDescriptor(2011, org.hibernate.type.descriptor.sql.internal.CapacityDependentDdlType@45b6c666) replaced previous registration(org.hibernate.type.descriptor.sql.internal.DdlTypeImpl@60e80279)
+2026-04-28 05:35:15 [main] INFO  o.h.e.t.j.p.i.JtaPlatformInitiator - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-04-28 05:35:15 [main] INFO  o.s.o.j.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-04-28 05:35:15 [main] INFO  l.slt.fieldops.config.FirebaseConfig - Firebase disabled — push notifications will not be sent
+2026-04-28 05:35:16 [main] INFO  o.s.d.j.r.query.QueryEnhancerFactory - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-04-28 05:35:20 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-04-28 05:35:20 [main] WARN  o.s.b.a.s.s.UserDetailsServiceAutoConfiguration - 
+
+Using generated security password: 48a26a99-61c1-4ae4-beaa-e807b1e9f0d4
+
+This generated password is for development use only. Your security configuration must be updated before running your application in production.
+
+2026-04-28 05:35:21 [main] INFO  o.s.b.a.e.web.EndpointLinksResolver - Exposing 4 endpoint(s) beneath base path '/actuator'
+2026-04-28 05:35:21 [main] INFO  o.s.s.web.DefaultSecurityFilterChain - Will secure any request with [org.springframework.security.web.session.DisableEncodeUrlFilter@3528e4d4, org.springframework.security.web.context.request.async.WebAsyncManagerIntegrationFilter@5c74f377, org.springframework.security.web.context.SecurityContextHolderFilter@12fdff78, org.springframework.security.web.header.HeaderWriterFilter@215f2743, org.springframework.web.filter.CorsFilter@484af6c1, org.springframework.security.web.authentication.logout.LogoutFilter@1b60f2c, lk.slt.fieldops.config.SecurityConfig$1@2109a691, org.springframework.security.web.savedrequest.RequestCacheAwareFilter@3f3a9fc4, org.springframework.security.web.servletapi.SecurityContextHolderAwareRequestFilter@30dccbcc, org.springframework.security.web.authentication.AnonymousAuthenticationFilter@4d186c57, org.springframework.security.web.session.SessionManagementFilter@631ccd95, org.springframework.security.web.access.ExceptionTranslationFilter@53d519cb, org.springframework.security.web.access.intercept.AuthorizationFilter@2787e051]
+2026-04-28 05:35:22 [main] INFO  o.s.b.w.e.tomcat.TomcatWebServer - Tomcat started on port 8080 (http) with context path ''
+2026-04-28 05:35:22 [main] INFO  lk.slt.fieldops.Application - Started Application in 17.892 seconds (process running for 18.737)
+BCrypt hash: $2a$10$wZrXaYS8Rk1oF6oHzj7CQ.QhXsAbYtXA2f8NrX60Crk6Hd9GqnJEy
+2026-04-28 05:35:29 [http-nio-8080-exec-1] INFO  o.a.c.c.C.[Tomcat].[localhost].[/] - Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-04-28 05:35:29 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+2026-04-28 05:35:29 [http-nio-8080-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+2026-04-28 05:36:20 [http-nio-8080-exec-2] DEBUG org.hibernate.SQL - 
+    select
+        u1_0.id,
+        u1_0.account_locked_until,
+        u1_0.address,
+        u1_0.branch_id,
+        u1_0.branch_name,
+        u1_0.created_at,
+        u1_0.created_by,
+        u1_0.email,
+        u1_0.failed_login_attempts,
+        u1_0.fcm_token,
+        u1_0.firebase_token,
+        u1_0.first_name,
+        u1_0.force_password_change,
+        u1_0.full_name,
+        u1_0.full_name_nic,
+        u1_0.is_active,
+        u1_0.last_login,
+        u1_0.last_login_at,
+        u1_0.last_login_ip,
+        u1_0.last_name,
+        u1_0.nic_number,
+        u1_0.password_changed_at,
+        u1_0.password_hash,
+        u1_0.phone,
+        u1_0.phone_number,
+        u1_0.preferred_language,
+        u1_0.profile_photo_url,
+        u1_0.role,
+        u1_0.status,
+        u1_0.subscription_number,
+        u1_0.updated_at,
+        u1_0.updated_by,
+        u1_0.username,
+        u1_0.workgroup_id 
+    from
+        users u1_0 
+    where
+        u1_0.username=?
+Hibernate: 
+    select
+        u1_0.id,
+        u1_0.account_locked_until,
+        u1_0.address,
+        u1_0.branch_id,
+        u1_0.branch_name,
+        u1_0.created_at,
+        u1_0.created_by,
+        u1_0.email,
+        u1_0.failed_login_attempts,
+        u1_0.fcm_token,
+        u1_0.firebase_token,
+        u1_0.first_name,
+        u1_0.force_password_change,
+        u1_0.full_name,
+        u1_0.full_name_nic,
+        u1_0.is_active,
+        u1_0.last_login,
+        u1_0.last_login_at,
+        u1_0.last_login_ip,
+        u1_0.last_name,
+        u1_0.nic_number,
+        u1_0.password_changed_at,
+        u1_0.password_hash,
+        u1_0.phone,
+        u1_0.phone_number,
+        u1_0.preferred_language,
+        u1_0.profile_photo_url,
+        u1_0.role,
+        u1_0.status,
+        u1_0.subscription_number,
+        u1_0.updated_at,
+        u1_0.updated_by,
+        u1_0.username,
+        u1_0.workgroup_id 
+    from
+        users u1_0 
+    where
+        u1_0.username=?
+2026-04-28 05:36:20 [http-nio-8080-exec-2] DEBUG org.hibernate.SQL - 
+    insert 
+    into
+        refresh_tokens
+        (created_at, device_info, expires_at, revoked_at, token, user_id) 
+    values
+        (?, ?, ?, ?, ?, ?)
+Hibernate: 
+    insert 
+    into
+        refresh_tokens
+        (created_at, device_info, expires_at, revoked_at, token, user_id) 
+    values
+        (?, ?, ?, ?, ?, ?)
+2026-04-28 05:36:20 [http-nio-8080-exec-2] DEBUG org.hibernate.SQL - 
+    update
+        users 
+    set
+        account_locked_until=?,
+        address=?,
+        branch_id=?,
+        branch_name=?,
+        created_by=?,
+        email=?,
+        failed_login_attempts=?,
+        fcm_token=?,
+        firebase_token=?,
+        first_name=?,
+        force_password_change=?,
+        full_name=?,
+        full_name_nic=?,
+        is_active=?,
+        last_login=?,
+        last_login_at=?,
+        last_login_ip=?,
+        last_name=?,
+        nic_number=?,
+        password_changed_at=?,
+        password_hash=?,
+        phone=?,
+        phone_number=?,
+        preferred_language=?,
+        profile_photo_url=?,
+        role=?,
+        status=?,
+        subscription_number=?,
+        updated_at=?,
+        updated_by=?,
+        username=?,
+        workgroup_id=? 
+    where
+        id=?
+Hibernate: 
+    update
+        users 
+    set
+        account_locked_until=?,
+        address=?,
+        branch_id=?,
+        branch_name=?,
+        created_by=?,
+        email=?,
+        failed_login_attempts=?,
+        fcm_token=?,
+        firebase_token=?,
+        first_name=?,
+        force_password_change=?,
+        full_name=?,
+        full_name_nic=?,
+        is_active=?,
+        last_login=?,
+        last_login_at=?,
+        last_login_ip=?,
+        last_name=?,
+        nic_number=?,
+        password_changed_at=?,
+        password_hash=?,
+        phone=?,
+        phone_number=?,
+        preferred_language=?,
+        profile_photo_url=?,
+        role=?,
+        status=?,
+        subscription_number=?,
+        updated_at=?,
+        updated_by=?,
+        username=?,
+        workgroup_id=? 
+    where
+        id=?
+2026-04-28 05:36:20 [http-nio-8080-exec-4] DEBUG org.hibernate.SQL - 
+    select
+        b1_0.id 
+    from
+        branches b1_0 
+    where
+        b1_0.code=? 
+    limit
+        ?
+Hibernate: 
+    select
+        b1_0.id 
+    from
+        branches b1_0 
+    where
+        b1_0.code=? 
+    limit
+        ?
+2026-04-28 05:36:21 [http-nio-8080-exec-4] DEBUG org.hibernate.SQL - 
+    insert 
+    into
+        branches
+        (address, branch_type, city, code, coverage_cities, coverage_districts, created_at, created_by, district, email, holiday_list, latitude, longitude, name, phone, postal_code, province, status, updated_at, working_days, working_hours_end, working_hours_start) 
+    values
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+Hibernate: 
+    insert 
+    into
+        branches
+        (address, branch_type, city, code, coverage_cities, coverage_districts, created_at, created_by, district, email, holiday_list, latitude, longitude, name, phone, postal_code, province, status, updated_at, working_days, working_hours_end, working_hours_start) 
+    values
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+2026-04-28 05:36:21 [http-nio-8080-exec-6] DEBUG org.hibernate.SQL - 
+    select
+        v1_0.id 
+    from
+        vehicles v1_0 
+    where
+        v1_0.registration_number=? 
+    limit
+        ?
+Hibernate: 
+    select
+        v1_0.id 
+    from
+        vehicles v1_0 
+    where
+        v1_0.registration_number=? 
+    limit
+        ?
+2026-04-28 05:36:21 [http-nio-8080-exec-6] DEBUG org.hibernate.SQL - 
+    insert 
+    into
+        vehicles
+        (branch_id, created_at, current_odometer, emission_test_expiry, fuel_type, insurance_company, insurance_expiry, insurance_policy_number, make, model, model_year, notes, registration_number, revenue_license_expiry, status, updated_at, vehicle_type) 
+    values
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+Hibernate: 
+    insert 
+    into
+        vehicles
+        (branch_id, created_at, current_odometer, emission_test_expiry, fuel_type, insurance_company, insurance_expiry, insurance_policy_number, make, model, model_year, notes, registration_number, revenue_license_expiry, status, updated_at, vehicle_type) 
+    values
+        (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+2026-04-28 05:36:22 [http-nio-8080-exec-8] DEBUG org.hibernate.SQL - 
+    select
+        f1_0.id,
+        f1_0.assigned_at,
+        f1_0.assigned_team_lead_id,
+        f1_0.assigned_team_lead_name,
+        f1_0.branch_id,
+        f1_0.category,
+        f1_0.cause_of_fault,
+        f1_0.completed_at,
+        f1_0.completion_remarks,
+        f1_0.created_at,
+        f1_0.customer_feedback,
+        f1_0.customer_id,
+        f1_0.customer_name,
+        f1_0.customer_phone,
+        f1_0.customer_rating,
+        f1_0.description,
+        f1_0.due_date,
+        f1_0.escalation_reason,
+        f1_0.fault_number,
+        f1_0.hold_reason,
+        f1_0.is_escalated,
+        f1_0.is_overdue,
+        f1_0.latitude,
+        f1_0.location_address,
+        f1_0.location_city,
+        f1_0.location_district,
+        f1_0.longitude,
+        f1_0.priority,
+        f1_0.reopen_count,
+        f1_0.reported_at,
+        f1_0.sla_breached,
+        f1_0.started_at,
+        f1_0.status,
+        f1_0.subscription_number,
+        f1_0.updated_at,
+        f1_0.updated_by 
+    from
+        faults f1_0 
+    order by
+        f1_0.reported_at desc
+Hibernate: 
+    select
+        f1_0.id,
+        f1_0.assigned_at,
+        f1_0.assigned_team_lead_id,
+        f1_0.assigned_team_lead_name,
+        f1_0.branch_id,
+        f1_0.category,
+        f1_0.cause_of_fault,
+        f1_0.completed_at,
+        f1_0.completion_remarks,
+        f1_0.created_at,
+        f1_0.customer_feedback,
+        f1_0.customer_id,
+        f1_0.customer_name,
+        f1_0.customer_phone,
+        f1_0.customer_rating,
+        f1_0.description,
+        f1_0.due_date,
+        f1_0.escalation_reason,
+        f1_0.fault_number,
+        f1_0.hold_reason,
+        f1_0.is_escalated,
+        f1_0.is_overdue,
+        f1_0.latitude,
+        f1_0.location_address,
+        f1_0.location_city,
+        f1_0.location_district,
+        f1_0.longitude,
+        f1_0.priority,
+        f1_0.reopen_count,
+        f1_0.reported_at,
+        f1_0.sla_breached,
+        f1_0.started_at,
+        f1_0.status,
+        f1_0.subscription_number,
+        f1_0.updated_at,
+        f1_0.updated_by 
+    from
+        faults f1_0 
+    order by
+        f1_0.reported_at desc
+2026-04-28 05:40:31 [HikariPool-1 housekeeper] WARN  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Thread starvation or clock leap detected (housekeeper delta=1m18s953ms930µs).

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/lenovo/AppData/Local/ngrok/**)",
+      "Bash(winget uninstall *)",
+      "Bash(winget install *)",
+      "Bash(ngrok config *)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); ngrok config add-authtoken 3BwTnje7jhZCLkMN1AEGGRGY87s_59ZWw64AsPbEt6HBnKjZd)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); Start-Process -FilePath \"ngrok\" -ArgumentList \"http 8080\" -WindowStyle Normal; Start-Sleep -Seconds 4; try { $r = Invoke-RestMethod -Uri \"http://localhost:4040/api/tunnels\" -TimeoutSec 5; $r.tunnels | ForEach-Object { $_.public_url } } catch { \"Could not reach ngrok API - check the ngrok window for the URL\" })",
+      "Bash(ngrok http *)",
+      "Bash(echo \"ngrok started, PID=$!\")",
+      "Bash(curl -s http://localhost:4040/api/tunnels)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(t['public_url']\\) for t in d.get\\('tunnels',[]\\)]\")",
+      "PowerShell(Get-Process ngrok -ErrorAction SilentlyContinue)",
+      "PowerShell(Get-Command ngrok -ErrorAction SilentlyContinue)",
+      "Read(//c/Users/lenovo/AppData/Local/Microsoft/WinGet/Packages/**)",
+      "PowerShell(netstat -ano)"
+    ],
+    "additionalDirectories": [
+      "c:\\Project\\slt\\SLTMobileApp\\src\\types",
+      "c:\\Project\\slt\\SLTMobileApp\\src\\screens\\teamlead",
+      "c:\\Project\\slt\\SLTMobileApp\\src\\navigation",
+      "c:\\Project\\slt\\SLTMobileApp\\src\\config"
+    ]
+  }
+}
