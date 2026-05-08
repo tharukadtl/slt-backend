@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/slt_wfms?erverTimezone=Asia/Colombo&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/slt_fieldops_db?useSSL=false&serverTimezone=Asia/Colombo&allowPublicKeyRetrieval=true
     username: root
     password: 1234
     driver-class-name: com.mysql.cj.jdbc.Driver
