@@ -20,22 +20,25 @@ public class UpdateJobRequest {
     @JsonAlias("status")
     private String newStatus;
 
-    private String reason;             // required when status = HOLD
-    private String causeOfFault;       // what caused the fault
-    private String completionRemarks;  // summary of work done
-    private String workNotes;          // ongoing notes
+    private String reason;               // required when status = HOLD
+    private String causeOfFault;         // what caused the fault
+    private String completionRemarks;    // summary of work done
+    private String workNotes;            // ongoing notes
+    private String completionPhotoUrls;  // required when status = COMPLETED (comma-separated)
 
     public UpdateJobRequest() {}
 
-    public String getNewStatus()         { return newStatus; }
-    public String getReason()            { return reason; }
-    public String getCauseOfFault()      { return causeOfFault; }
-    public String getCompletionRemarks() { return completionRemarks; }
-    public String getWorkNotes()         { return workNotes; }
+    public String getNewStatus()           { return newStatus; }
+    public String getReason()              { return reason; }
+    public String getCauseOfFault()        { return causeOfFault; }
+    public String getCompletionRemarks()   { return completionRemarks; }
+    public String getWorkNotes()           { return workNotes; }
+    public String getCompletionPhotoUrls() { return completionPhotoUrls; }
 
-    public void setNewStatus(String v)         { this.newStatus         = v; }
-    public void setReason(String v)            { this.reason            = v; }
-    public void setCauseOfFault(String v)      { this.causeOfFault      = v; }
-    public void setCompletionRemarks(String v) { this.completionRemarks = v; }
-    public void setWorkNotes(String v)         { this.workNotes         = v; }
+    public void setNewStatus(String v)             { this.newStatus             = v; }
+    public void setReason(String v)                { this.reason                = v; }
+    public void setCauseOfFault(String v)          { this.causeOfFault          = v; }
+    public void setCompletionRemarks(String v)     { this.completionRemarks     = v; }
+    public void setWorkNotes(String v)             { this.workNotes             = v; }
+    public void setCompletionPhotoUrls(String v)   { this.completionPhotoUrls   = v; }
 }

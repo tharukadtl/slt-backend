@@ -302,6 +302,10 @@ public class JobService {
             (request.getReason() == null || request.getReason().isBlank())) {
             throw new RuntimeException("A reason is required when setting status to " + newStatus + ".");
         }
+        if (newStatus == Job.JobStatus.COMPLETED &&
+            (request.getCompletionPhotoUrls() == null || request.getCompletionPhotoUrls().isBlank())) {
+            throw new RuntimeException("At least one after-service photo is required to complete a job.");
+        }
 
         job.setStatus(newStatus);
         job.setUpdatedBy(userId);
@@ -353,6 +357,7 @@ public class JobService {
             job.setCompletedAt(LocalDateTime.now());
             job.setCauseOfFault(request.getCauseOfFault());
             job.setCompletionRemarks(request.getCompletionRemarks());
+            job.setCompletionPhotoUrls(request.getCompletionPhotoUrls());
 
             // Sync completion back to the linked fault
             if (job.getFaultId() != null) {

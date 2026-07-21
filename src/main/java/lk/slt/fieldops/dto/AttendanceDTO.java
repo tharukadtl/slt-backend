@@ -21,14 +21,19 @@ public class AttendanceDTO {
     @AllArgsConstructor
     public static class CheckInRequest {
 
-        @NotNull(message = "Latitude is required")
+        // Nullable on purpose: when GPS is unavailable on-device, the client
+        // sends null rather than a fake (0,0) coordinate — a phantom
+        // location would otherwise silently pollute location-aware features
+        // (heat maps, clustering, resource planning) with no way to tell it
+        // apart from a real check-in at 0°N 0°E. @DecimalMin/@DecimalMax are
+        // skipped by Bean Validation when the value is null, so a real,
+        // out-of-range coordinate is still rejected.
         @DecimalMin(value = "-90.0",
                 message = "Latitude must be >= -90")
         @DecimalMax(value = "90.0",
                 message = "Latitude must be <= 90")
         private Double latitude;
 
-        @NotNull(message = "Longitude is required")
         @DecimalMin(value = "-180.0",
                 message = "Longitude must be >= -180")
         @DecimalMax(value = "180.0",

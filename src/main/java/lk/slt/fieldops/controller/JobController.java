@@ -305,6 +305,12 @@ public class JobController {
         if (signature == null || signature.isBlank()) {
             throw new RuntimeException("signature is required in the request body.");
         }
+        // Guards against the FR-9 regression this was built to fix: a
+        // hardcoded placeholder must never be accepted as a real capture.
+        if ("signature_placeholder".equals(signature.trim())) {
+            throw new RuntimeException(
+                "'signature_placeholder' is not a valid signature — a real customer signature must be captured.");
+        }
         return ResponseEntity.ok(jobService.submitSignature(id, signature, userId));
     }
 }
