@@ -29,6 +29,9 @@ public class ReportRequestDTO {
     public static final String TYPE_ATTENDANCE =
             "ATTENDANCE";
 
+    // REP-10 (spec §6 Required Reports)
+    public static final String TYPE_AUDIT_TRAIL            = "AUDIT_TRAIL";           // REP-10
+
     // Export formats
     public static final String FORMAT_PDF = "PDF";
     public static final String FORMAT_EXCEL = "EXCEL";
@@ -62,6 +65,8 @@ public class ReportRequestDTO {
     private String branchId;
     private String category;
     private String status;
+
+    private String entityType;
 
     // Optional column selection
     private List<String> columns;

@@ -51,6 +51,9 @@ public class StockTransaction {
     @Column(name = "performed_by_role", length = 30)
     private String performedByRole;
 
+    @Column(name = "ip_address", length = 45)
+    private String ipAddress;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "transaction_type", nullable = false, length = 30)
     private TransactionType transactionType;

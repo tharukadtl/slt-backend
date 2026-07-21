@@ -117,6 +117,24 @@ public class ReportResponseDTO {
         private long totalRatings;
     }
 
+    // ─── REP-10: Audit Trail ───────────────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AuditTrailItemDTO {
+        private String entityType;         // FAULT | PAYMENT | USER | STOCK
+        private String entityId;
+        private String action;
+        private String actorName;
+        private String actorRole;
+        private String ipAddress;
+        private String previousValue;
+        private String newValue;
+        private String details;
+        private LocalDateTime timestamp;
+    }
+
     // ─── Summary Stats ────────────────────────────────────
     @Data
     @Builder

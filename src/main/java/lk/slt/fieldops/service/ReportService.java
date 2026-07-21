@@ -44,6 +44,9 @@ public class ReportService {
     private final PaymentRepository paymentRepository;
     private final PaymentApprovalRepository
             paymentApprovalRepository;
+    private final StockTransactionRepository stockTransactionRepository;
+    private final FaultHistoryRepository faultHistoryRepository;
+    private final UserAuditLogRepository userAuditLogRepository;
 
     private static final DateTimeFormatter DATE_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -91,6 +94,122 @@ public class ReportService {
                 ? req.getEndDate()
                 : LocalDate.now();
         return new LocalDate[]{start, end};
+    }
+
+    // ─── REP-10: Audit Trail Report ────────────────────────
+
+    public ReportResponseDTO getAuditTrailReport(ReportRequestDTO req) {
+        log.info("Generating audit trail report (REP-10)");
+        LocalDate[] range = resolveDateRange(req);
+        LocalDateTime startDt = range[0].atStartOfDay();
+        LocalDateTime endDt = range[1].atTime(23, 59, 59);
+
+        List<ReportResponseDTO.AuditTrailItemDTO> items = new ArrayList<>();
+
+        boolean wantFault = req.getEntityType() == null || req.getEntityType().isBlank()
+                || "FAULT".equalsIgnoreCase(req.getEntityType());
+        boolean wantPayment = req.getEntityType() == null || req.getEntityType().isBlank()
+                || "PAYMENT".equalsIgnoreCase(req.getEntityType());
+        boolean wantStock = req.getEntityType() == null || req.getEntityType().isBlank()
+                || "STOCK".equalsIgnoreCase(req.getEntityType());
+        boolean wantUser = req.getEntityType() == null || req.getEntityType().isBlank()
+                || "USER".equalsIgnoreCase(req.getEntityType());
+
+        if (wantFault) {
+            faultHistoryRepository.findAllRecent().stream()
+                    .filter(h -> h.getCreatedAt() != null && !h.getCreatedAt().isBefore(startDt) && !h.getCreatedAt().isAfter(endDt))
+                    .forEach(h -> {
+                        // Actor identity is embedded in the description as "{name} [{role}]: {reason}"
+                        // rather than the (always-null) `actor` relation — see FaultService.writeHistory().
+                        String actorName = null;
+                        String actorRole = null;
+                        if (h.getDescription() != null && h.getDescription().contains(" [")) {
+                            int bracketStart = h.getDescription().indexOf(" [");
+                            int bracketEnd = h.getDescription().indexOf(']', bracketStart);
+                            actorName = h.getDescription().substring(0, bracketStart);
+                            if (bracketEnd > bracketStart) {
+                                actorRole = h.getDescription().substring(bracketStart + 2, bracketEnd);
+                            }
+                        }
+                        items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
+                                .entityType("FAULT")
+                                .entityId(h.getFaultNumber())
+                                .action(h.getEventType())
+                                .actorName(actorName)
+                                .actorRole(actorRole)
+                                .ipAddress(h.getIpAddress())
+                                .previousValue(h.getPreviousValue())
+                                .newValue(h.getNewValue())
+                                .details(h.getTitle())
+                                .timestamp(h.getCreatedAt())
+                                .build());
+                    });
+        }
+
+        if (wantPayment) {
+            paymentApprovalRepository.findAll().stream()
+                    .filter(a -> a.getCreatedAt() != null && !a.getCreatedAt().isBefore(startDt) && !a.getCreatedAt().isAfter(endDt))
+                    .forEach(a -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
+                            .entityType("PAYMENT")
+                            .entityId(String.valueOf(a.getPaymentId()))
+                            .action(a.getAction() != null ? a.getAction().name() : null)
+                            .actorName(a.getAdminName())
+                            .actorRole(a.getAdminRole())
+                            .ipAddress(a.getIpAddress())
+                            .previousValue(a.getOriginalAmount() != null ? a.getOriginalAmount().toString() : null)
+                            .newValue(a.getAdjustedAmount() != null ? a.getAdjustedAmount().toString() : null)
+                            .details(a.getReason())
+                            .timestamp(a.getCreatedAt())
+                            .build()));
+        }
+
+        if (wantStock) {
+            stockTransactionRepository.findByDateRange(startDt, endDt)
+                    .forEach(st -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
+                            .entityType("STOCK")
+                            .entityId(st.getMaterialName())
+                            .action(st.getTransactionType() != null ? st.getTransactionType().name() : null)
+                            .actorName(st.getPerformedByName())
+                            .actorRole(st.getPerformedByRole())
+                            .ipAddress(st.getIpAddress())
+                            .previousValue(st.getStockBefore() != null ? st.getStockBefore().toString() : null)
+                            .newValue(st.getStockAfter() != null ? st.getStockAfter().toString() : null)
+                            .details(st.getReason())
+                            .timestamp(st.getCreatedAt())
+                            .build()));
+        }
+
+        if (wantUser) {
+            userAuditLogRepository.findByDateRange(startDt, endDt)
+                    .forEach(u -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
+                            .entityType("USER")
+                            .entityId(u.getTargetUserName())
+                            .action(u.getAction() != null ? u.getAction().name() : null)
+                            .actorName(u.getPerformedByName())
+                            .actorRole(u.getPerformedByRole())
+                            .ipAddress(u.getIpAddress())
+                            .previousValue(u.getPreviousValue())
+                            .newValue(u.getNewValue())
+                            .details(null)
+                            .timestamp(u.getCreatedAt())
+                            .build()));
+        }
+
+        items.sort((a, b) -> {
+            if (a.getTimestamp() == null || b.getTimestamp() == null) return 0;
+            return b.getTimestamp().compareTo(a.getTimestamp());
+        });
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_AUDIT_TRAIL)
+                .reportTitle("Audit Trail Report")
+                .period(req.getPeriod())
+                .startDate(range[0].format(DATE_FMT))
+                .endDate(range[1].format(DATE_FMT))
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(items.size())
+                .data(items)
+                .build();
     }
 
     // ─── Fault Trends ─────────────────────────────────────

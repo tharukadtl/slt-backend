@@ -161,6 +161,20 @@ public class ReportController {
         return ResponseEntity.ok(response);
     }
 
+    /** GET /api/reports/audit-trail — REP-10 */
+    @GetMapping("/audit-trail")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<ReportResponseDTO> getAuditTrailReport(
+            @RequestParam(defaultValue = "THIS_MONTH") String period,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(required = false) String entityType) {
+        ReportRequestDTO req = ReportRequestDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_AUDIT_TRAIL)
+                .period(period).startDate(startDate).endDate(endDate).entityType(entityType).build();
+        return ResponseEntity.ok(reportService.getAuditTrailReport(req));
+    }
+
     // â”€â”€â”€ Export Endpoints â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     /**

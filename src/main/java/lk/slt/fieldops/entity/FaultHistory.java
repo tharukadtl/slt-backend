@@ -70,6 +70,9 @@ public class FaultHistory {
             length = 200)
     private String newValue;
 
+    @Column(name = "ip_address", length = 45)
+    private String ipAddress;
+
     @Column(name = "is_system")
     @Builder.Default
     private Boolean isSystem = false;
