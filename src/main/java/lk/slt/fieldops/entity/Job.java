@@ -131,6 +131,10 @@ public class Job {
     @Column(name = "completion_signature", columnDefinition = "TEXT")
     private String completionSignature;
 
+    // Comma-separated after-service photo URLs, required to complete a job.
+    @Column(name = "completion_photo_urls", columnDefinition = "TEXT")
+    private String completionPhotoUrls;
+
     @Column(name = "created_by")
     private Long createdBy;
 
@@ -185,6 +189,7 @@ public class Job {
     public LocalDateTime getCreatedAt()     { return createdAt; }
     public LocalDateTime getUpdatedAt()     { return updatedAt; }
     public String      getCompletionSignature() { return completionSignature; }
+    public String      getCompletionPhotoUrls() { return completionPhotoUrls; }
     public Long        getCreatedBy()       { return createdBy; }
     public Long        getUpdatedBy()       { return updatedBy; }
 
@@ -222,6 +227,7 @@ public class Job {
     public void setIsBillable(Boolean v)         { this.isBillable      = v; }
     public void setLaborHours(BigDecimal v)      { this.laborHours      = v; }
     public void setCompletionSignature(String v) { this.completionSignature = v; }
+    public void setCompletionPhotoUrls(String v) { this.completionPhotoUrls = v; }
     public void setCreatedBy(Long v)             { this.createdBy       = v; }
     public void setUpdatedBy(Long v)             { this.updatedBy       = v; }
 }
