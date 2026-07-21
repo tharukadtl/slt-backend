@@ -11,12 +11,19 @@ import java.time.LocalDateTime;
  *   Team Lead submits  → DRAFT
  *   Admin approves     → FINAL  (generates bill reference e.g. BILL-2026-02-00001)
  *   Admin rejects      → NOT_APPROVED (with reason)
+ *
+ * Dispute / amendment cycle (FR-31 / FR-32, SRS 5.2.3 & 5.5.2.1):
+ *   Client reports issue on an approved bill  → DISPUTED
+ *   Admin amends line items + justification    → PENDING_CLIENT_REVIEW
+ *   Client can dispute the amended bill again  → DISPUTED  (cycle repeats until accepted)
  */
 @Entity
 @Table(name = "payments")
 public class Payment {
 
-    public enum PaymentStatus { DRAFT, FINAL, NOT_APPROVED }
+    public enum PaymentStatus {
+        DRAFT, FINAL, NOT_APPROVED, CLARIFICATION_REQUESTED, DISPUTED, PENDING_CLIENT_REVIEW, CLIENT_ACCEPTED
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -70,6 +77,15 @@ public class Payment {
     @Column(name = "labour_charge", nullable = false, precision = 12, scale = 2)
     private BigDecimal labourCharge = BigDecimal.ZERO;
 
+    @Column(name = "labour_start_time")
+    private LocalDateTime labourStartTime;
+
+    @Column(name = "labour_end_time")
+    private LocalDateTime labourEndTime;
+
+    @Column(name = "hourly_rate", precision = 10, scale = 2)
+    private BigDecimal hourlyRate;
+
     @Column(name = "total_amount", nullable = false, precision = 12, scale = 2)
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
@@ -89,7 +105,7 @@ public class Payment {
     private String workSummary;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @Column(nullable = false, length = 30)
     private PaymentStatus status = PaymentStatus.DRAFT;
 
     @Column(name = "approved_by")
@@ -106,6 +122,32 @@ public class Payment {
 
     @Column(name = "bill_reference", length = 50)
     private String billReference;
+
+    // ─── Dispute (FR-31, SRS 5.2.3) — set when the Client reports an issue ───
+    @Column(name = "dispute_category", length = 100)
+    private String disputeCategory;
+
+    @Column(name = "dispute_description", columnDefinition = "TEXT")
+    private String disputeDescription;
+
+    @Column(name = "dispute_photo_url", columnDefinition = "TEXT")
+    private String disputePhotoUrl;
+
+    @Column(name = "disputed_at")
+    private LocalDateTime disputedAt;
+
+    // ─── Amendment (FR-32, SRS 5.5.2.1) — set when the Admin amends & resends ───
+    @Column(name = "amendment_justification", columnDefinition = "TEXT")
+    private String amendmentJustification;
+
+    @Column(name = "amended_by")
+    private Long amendedBy;
+
+    @Column(name = "amended_by_name", length = 150)
+    private String amendedByName;
+
+    @Column(name = "amended_at")
+    private LocalDateTime amendedAt;
 
     @Column(name = "submitted_at")
     private LocalDateTime submittedAt;
@@ -145,6 +187,9 @@ public class Payment {
     public BigDecimal    getMaterialsFocTotal()       { return materialsFocTotal; }
     public BigDecimal    getMaterialsChargeableTotal(){ return materialsChargeableTotal; }
     public BigDecimal    getLabourCharge()            { return labourCharge; }
+    public LocalDateTime getLabourStartTime()         { return labourStartTime; }
+    public LocalDateTime getLabourEndTime()           { return labourEndTime; }
+    public BigDecimal    getHourlyRate()              { return hourlyRate; }
     public BigDecimal    getTotalAmount()             { return totalAmount; }
     public BigDecimal    getApprovedAmount()          { return approvedAmount; }
     public String        getCustomerSignatureUrl()    { return customerSignatureUrl; }
@@ -157,6 +202,14 @@ public class Payment {
     public LocalDateTime getApprovedAt()              { return approvedAt; }
     public String        getRejectionReason()         { return rejectionReason; }
     public String        getBillReference()           { return billReference; }
+    public String        getDisputeCategory()         { return disputeCategory; }
+    public String        getDisputeDescription()      { return disputeDescription; }
+    public String        getDisputePhotoUrl()         { return disputePhotoUrl; }
+    public LocalDateTime getDisputedAt()              { return disputedAt; }
+    public String        getAmendmentJustification()  { return amendmentJustification; }
+    public Long          getAmendedBy()               { return amendedBy; }
+    public String        getAmendedByName()           { return amendedByName; }
+    public LocalDateTime getAmendedAt()               { return amendedAt; }
     public LocalDateTime getSubmittedAt()             { return submittedAt; }
     public LocalDateTime getCreatedAt()               { return createdAt; }
     public LocalDateTime getUpdatedAt()               { return updatedAt; }
@@ -178,6 +231,9 @@ public class Payment {
     public void setMaterialsFocTotal(BigDecimal v)      { this.materialsFocTotal       = v; }
     public void setMaterialsChargeableTotal(BigDecimal v){ this.materialsChargeableTotal = v; }
     public void setLabourCharge(BigDecimal v)           { this.labourCharge            = v; }
+    public void setLabourStartTime(LocalDateTime v)     { this.labourStartTime         = v; }
+    public void setLabourEndTime(LocalDateTime v)       { this.labourEndTime           = v; }
+    public void setHourlyRate(BigDecimal v)             { this.hourlyRate              = v; }
     public void setTotalAmount(BigDecimal v)            { this.totalAmount             = v; }
     public void setApprovedAmount(BigDecimal v)         { this.approvedAmount          = v; }
     public void setCustomerSignatureUrl(String v)       { this.customerSignatureUrl    = v; }
@@ -190,4 +246,12 @@ public class Payment {
     public void setApprovedAt(LocalDateTime v)          { this.approvedAt              = v; }
     public void setRejectionReason(String v)            { this.rejectionReason         = v; }
     public void setBillReference(String v)              { this.billReference           = v; }
+    public void setDisputeCategory(String v)            { this.disputeCategory         = v; }
+    public void setDisputeDescription(String v)         { this.disputeDescription      = v; }
+    public void setDisputePhotoUrl(String v)            { this.disputePhotoUrl         = v; }
+    public void setDisputedAt(LocalDateTime v)          { this.disputedAt              = v; }
+    public void setAmendmentJustification(String v)     { this.amendmentJustification  = v; }
+    public void setAmendedBy(Long v)                    { this.amendedBy               = v; }
+    public void setAmendedByName(String v)              { this.amendedByName           = v; }
+    public void setAmendedAt(LocalDateTime v)           { this.amendedAt               = v; }
 }

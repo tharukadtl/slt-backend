@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 @Table(name = "payment_approvals")
 public class PaymentApproval {
 
-    public enum Action { APPROVED, REJECTED, ADJUSTED }
+    public enum Action { APPROVED, REJECTED, ADJUSTED, CLARIFICATION_REQUESTED, AMENDED, CLIENT_ACCEPTED }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,7 +22,7 @@ public class PaymentApproval {
     private Long paymentId;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
+    @Column(nullable = false, length = 30)
     private Action action;
 
     @Column(name = "admin_id", nullable = false)
@@ -30,6 +30,12 @@ public class PaymentApproval {
 
     @Column(name = "admin_name", length = 150)
     private String adminName;
+
+    @Column(name = "admin_role", length = 30)
+    private String adminRole;
+
+    @Column(name = "ip_address", length = 45)
+    private String ipAddress;
 
     @Column(name = "original_amount", precision = 12, scale = 2)
     private BigDecimal originalAmount;
@@ -53,6 +59,8 @@ public class PaymentApproval {
     public Action        getAction()          { return action; }
     public Long          getAdminId()         { return adminId; }
     public String        getAdminName()       { return adminName; }
+    public String        getAdminRole()       { return adminRole; }
+    public String        getIpAddress()       { return ipAddress; }
     public BigDecimal    getOriginalAmount()  { return originalAmount; }
     public BigDecimal    getAdjustedAmount()  { return adjustedAmount; }
     public String        getReason()          { return reason; }
@@ -63,6 +71,8 @@ public class PaymentApproval {
     public void setAction(Action v)             { this.action         = v; }
     public void setAdminId(Long v)              { this.adminId        = v; }
     public void setAdminName(String v)          { this.adminName      = v; }
+    public void setAdminRole(String v)          { this.adminRole      = v; }
+    public void setIpAddress(String v)          { this.ipAddress      = v; }
     public void setOriginalAmount(BigDecimal v) { this.originalAmount = v; }
     public void setAdjustedAmount(BigDecimal v) { this.adjustedAmount = v; }
     public void setReason(String v)             { this.reason         = v; }

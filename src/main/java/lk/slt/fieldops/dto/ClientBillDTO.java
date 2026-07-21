@@ -46,9 +46,14 @@ public class ClientBillDTO {
     private static String mapStatus(Payment.PaymentStatus s) {
         if (s == null) return "PENDING";
         return switch (s) {
-            case FINAL        -> "APPROVED";
-            case NOT_APPROVED -> "REJECTED";
-            default           -> "PENDING";
+            case FINAL                 -> "APPROVED";
+            case NOT_APPROVED          -> "REJECTED";
+            case DISPUTED              -> "DISPUTED";
+            case PENDING_CLIENT_REVIEW -> "PENDING_CLIENT_REVIEW";
+            case CLIENT_ACCEPTED       -> "ACCEPTED";
+            // DRAFT and CLARIFICATION_REQUESTED are pre-client-review states — "still
+            // pending admin action" is accurate for both, so they stay in the PENDING bucket.
+            default                    -> "PENDING";
         };
     }
 
