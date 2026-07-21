@@ -35,6 +35,8 @@ public class FaultAssignmentService {
             faultNoteRepository;
     private final WebSocketEventPublisher
             webSocketEventPublisher;
+    private final JobCreationService
+            jobCreationService;
 
     private static final DateTimeFormatter
             FMT = DateTimeFormatter
@@ -122,6 +124,18 @@ public class FaultAssignmentService {
         }
 
         faultRepository.save(fault);
+
+        // FR-17 (SRS 5.5.1): Admin can assign a fault directly to a Technician,
+        // not only to a Team Lead. When the target is a Technician, there's no
+        // Team Lead to later dispatch a Job via JobService.createJob, so we
+        // create the Job here instead — otherwise the fault would show as
+        // "assigned" but never actually reach the technician's job list.
+        // Team Lead targets are unaffected: they still create Jobs themselves
+        // via JobService.createJob once they've triaged the fault.
+        if (technician.getRole() == User.Role.TECHNICIAN) {
+            jobCreationService.createJobForFaultAssignment(
+                    fault, technician, req.getPriority());
+        }
 
         // Save history event
         saveHistoryEvent(
@@ -268,6 +282,14 @@ public class FaultAssignmentService {
         fault.setAssignedTeamLeadName(newTech.getFullName());
         faultRepository.save(fault);
 
+        // Same FR-17 direct-to-Technician case as assignFault() above: if the
+        // new assignee is a Technician (not a Team Lead), there's no Team Lead
+        // to dispatch a Job via JobService.createJob, so create it here.
+        if (newTech.getRole() == User.Role.TECHNICIAN) {
+            jobCreationService.createJobForFaultAssignment(
+                    fault, newTech, null);
+        }
+
         // Save history event
         saveHistoryEvent(
                 fault, admin,
@@ -361,6 +383,8 @@ public class FaultAssignmentService {
 
         // Escalate priority to HIGH
         fault.setPriority(Fault.FaultPriority.HIGH);
+        fault.setIsEscalated(true);
+        fault.setEscalationReason(req.getReason());
         faultRepository.save(fault);
 
         // Save history event
@@ -453,6 +477,17 @@ public class FaultAssignmentService {
                         new RuntimeException(
                                 "Admin not found: "
                                         + adminId));
+
+        // Validate once up front rather than silently swallowing per-fault —
+        // the same priority string applies to every fault in this batch.
+        if (req.getPriority() != null && !req.getPriority().isBlank()) {
+            try {
+                Fault.FaultPriority.valueOf(req.getPriority().toUpperCase());
+            } catch (Exception e) {
+                throw new RuntimeException("Invalid priority: " + req.getPriority()
+                        + ". Valid: HIGH, MEDIUM, LOW");
+            }
+        }
 
         List<Long> successIds = new ArrayList<>();
         List<Long> failedIds = new ArrayList<>();
