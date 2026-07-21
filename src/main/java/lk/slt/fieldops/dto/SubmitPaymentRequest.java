@@ -2,6 +2,7 @@ package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 /**
  * SubmitPaymentRequest — Team Lead submits payment after job completion.
@@ -25,6 +26,13 @@ public class SubmitPaymentRequest {
     private BigDecimal materialsFocTotal        = BigDecimal.ZERO;
     private BigDecimal materialsChargeableTotal = BigDecimal.ZERO;
     private BigDecimal labourCharge             = BigDecimal.ZERO;
+
+    // Optional: if both times + hourlyRate are given, labourCharge is computed
+    // server-side from them instead of trusting the flat labourCharge above.
+    private LocalDateTime labourStartTime;
+    private LocalDateTime labourEndTime;
+    private BigDecimal    hourlyRate;
+
     private String     customerSignatureUrl;
     private String     jobPhotosUrls;
     private String     materialJustification;
@@ -36,6 +44,9 @@ public class SubmitPaymentRequest {
     public BigDecimal getMaterialsFocTotal()         { return materialsFocTotal; }
     public BigDecimal getMaterialsChargeableTotal()  { return materialsChargeableTotal; }
     public BigDecimal getLabourCharge()              { return labourCharge; }
+    public LocalDateTime getLabourStartTime()        { return labourStartTime; }
+    public LocalDateTime getLabourEndTime()          { return labourEndTime; }
+    public BigDecimal getHourlyRate()                { return hourlyRate; }
     public String     getCustomerSignatureUrl()      { return customerSignatureUrl; }
     public String     getJobPhotosUrls()             { return jobPhotosUrls; }
     public String     getMaterialJustification()     { return materialJustification; }
@@ -45,6 +56,9 @@ public class SubmitPaymentRequest {
     public void setMaterialsFocTotal(BigDecimal v)         { this.materialsFocTotal        = v; }
     public void setMaterialsChargeableTotal(BigDecimal v)  { this.materialsChargeableTotal = v; }
     public void setLabourCharge(BigDecimal v)              { this.labourCharge             = v; }
+    public void setLabourStartTime(LocalDateTime v)        { this.labourStartTime          = v; }
+    public void setLabourEndTime(LocalDateTime v)          { this.labourEndTime            = v; }
+    public void setHourlyRate(BigDecimal v)                { this.hourlyRate               = v; }
     public void setCustomerSignatureUrl(String v)          { this.customerSignatureUrl     = v; }
     public void setJobPhotosUrls(String v)                 { this.jobPhotosUrls            = v; }
     public void setMaterialJustification(String v)         { this.materialJustification    = v; }
