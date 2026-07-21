@@ -14,7 +14,9 @@ import java.time.LocalDateTime;
  * UNIQUE KEY: (team_lead_id, session_date)
  */
 @Entity
-@Table(name = "day_sessions")
+@Table(name = "day_sessions", uniqueConstraints = @UniqueConstraint(
+        name = "uk_day_sessions_team_lead_date",
+        columnNames = {"team_lead_id", "session_date"}))
 public class DaySession {
 
     public enum SessionStatus { ACTIVE, CLOSED }

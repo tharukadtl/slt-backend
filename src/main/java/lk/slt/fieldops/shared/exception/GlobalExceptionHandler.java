@@ -41,6 +41,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
     }
 
+    @ExceptionHandler(DuplicateSessionException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicateSession(DuplicateSessionException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status",    409);
+        body.put("error",     "Conflict");
+        body.put("message",   ex.getMessage());
+        body.put("timestamp", LocalDateTime.now().toString());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException ex) {
         log.warning("Business error: " + ex.getMessage());

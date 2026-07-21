@@ -5,7 +5,9 @@ import lk.slt.fieldops.entity.*;
 import lk.slt.fieldops.entity.Fault;
 import lk.slt.fieldops.repository.*;
 import lk.slt.fieldops.repository.FaultRepository;
+import lk.slt.fieldops.shared.exception.DuplicateSessionException;
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,8 +63,7 @@ public class JobService {
         sessionRepo.closeStaleActiveSessions(teamLeadId, today);
 
         if (sessionRepo.existsByTeamLeadIdAndSessionDate(teamLeadId, today)) {
-            throw new RuntimeException(
-                "BOD already completed for today. You cannot do BOD twice in one day.");
+            throw new DuplicateSessionException("You have already checked in today.");
         }
 
         if (request.getTechnicianIds() == null || request.getTechnicianIds().isEmpty()) {
@@ -79,7 +80,14 @@ public class JobService {
         session.setBodLongitude(request.getLongitude());
         session.setBodVehicleId(request.getVehicleId());
         session.setBodOdometer(request.getOdometerStart());
-        DaySession saved = sessionRepo.save(session);
+
+        DaySession saved;
+        try {
+            saved = sessionRepo.save(session);
+        } catch (DataIntegrityViolationException e) {
+            // Race: another request created today's session between the exists() check above and this save
+            throw new DuplicateSessionException("You have already checked in today.");
+        }
 
         // 2. Add each technician as a session member
         for (Long techId : request.getTechnicianIds()) {
