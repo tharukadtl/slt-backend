@@ -76,19 +76,36 @@ public class SecurityConfig {
                     HttpServletResponse res, FilterChain chain)
                     throws ServletException, IOException {
 
-                String header = req.getHeader("Authorization");
-                if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
-                    String token = header.substring(7);
-                    if (jwtTokenProvider.validateToken(token)) {
-                        Long   userId = jwtTokenProvider.getUserIdFromToken(token);
-                        String role   = jwtTokenProvider.getRoleFromToken(token);
-                        List<SimpleGrantedAuthority> auths =
-                            List.of(new SimpleGrantedAuthority("ROLE_" + role));
-                        SecurityContextHolder.getContext().setAuthentication(
-                            new UsernamePasswordAuthenticationToken(userId, null, auths));
+                // Populated for the lifetime of this request so service-layer audit-trail
+                // writes (fault history, payment approvals, user changes, stock txns) can
+                // record the caller's IP without threading it through every method signature.
+                lk.slt.fieldops.shared.RequestContext.setClientIp(resolveClientIp(req));
+                try {
+                    String header = req.getHeader("Authorization");
+                    if (StringUtils.hasText(header) && header.startsWith("Bearer ")) {
+                        String token = header.substring(7);
+                        if (jwtTokenProvider.validateToken(token)) {
+                            Long   userId = jwtTokenProvider.getUserIdFromToken(token);
+                            String role   = jwtTokenProvider.getRoleFromToken(token);
+                            List<SimpleGrantedAuthority> auths =
+                                List.of(new SimpleGrantedAuthority("ROLE_" + role));
+                            SecurityContextHolder.getContext().setAuthentication(
+                                new UsernamePasswordAuthenticationToken(userId, null, auths));
+                        }
                     }
+                    chain.doFilter(req, res);
+                } finally {
+                    lk.slt.fieldops.shared.RequestContext.clear();
                 }
-                chain.doFilter(req, res);
+            }
+
+            /** Prefers X-Forwarded-For (set by a reverse proxy/load balancer) over the raw socket address. */
+            private String resolveClientIp(HttpServletRequest req) {
+                String xff = req.getHeader("X-Forwarded-For");
+                if (StringUtils.hasText(xff)) {
+                    return xff.split(",")[0].trim();
+                }
+                return req.getRemoteAddr();
             }
         };
     }
