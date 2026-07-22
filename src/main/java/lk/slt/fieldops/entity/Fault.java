@@ -21,7 +21,7 @@ public class Fault {
     }
 
     public enum FaultCategory {
-        INTERNET, PHONE, TV, OTHER
+        INTERNET, PHONE, FIBER, TV, OTHER
     }
 
     public enum FaultPriority {

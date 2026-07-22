@@ -197,7 +197,7 @@ public class FaultController {
         return switch (category.toLowerCase()) {
             case "broadband", "internet" -> "INTERNET";
             case "telephone", "phone"   -> "PHONE";
-            case "fiber"                -> "INTERNET";
+            case "fiber"                -> "FIBER";
             case "television", "tv"     -> "TV";
             default                     -> "OTHER";
         };
