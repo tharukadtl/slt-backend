@@ -101,6 +101,14 @@ public class DpService {
         return mapToDTO(dpRepo.save(dp));
     }
 
+    /** Exchange/CAB/DP/Circuit hierarchy gap #1 (QA_Compliance_Consolidated_Report.md) — same shape as WorkGroupService.activate(). */
+    @Transactional
+    public DpDTO activate(Long id) {
+        Dp dp = findOrThrow(id);
+        dp.setIsActive(true);
+        return mapToDTO(dpRepo.save(dp));
+    }
+
     private Dp findOrThrow(Long id) {
         return dpRepo.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("DP not found with id: " + id));

@@ -106,6 +106,14 @@ public class CircuitService {
         return mapToDTO(circuitRepo.save(c));
     }
 
+    /** Exchange/CAB/DP/Circuit hierarchy gap #1 (QA_Compliance_Consolidated_Report.md) — same shape as WorkGroupService.activate(). */
+    @Transactional
+    public CircuitDTO activate(Long id) {
+        Circuit c = findOrThrow(id);
+        c.setIsActive(true);
+        return mapToDTO(circuitRepo.save(c));
+    }
+
     private Circuit findOrThrow(Long id) {
         return circuitRepo.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Circuit not found with id: " + id));

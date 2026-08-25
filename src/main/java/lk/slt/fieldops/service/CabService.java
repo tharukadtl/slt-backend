@@ -99,6 +99,14 @@ public class CabService {
         return mapToDTO(cabRepo.save(c));
     }
 
+    /** Exchange/CAB/DP/Circuit hierarchy gap #1 (QA_Compliance_Consolidated_Report.md) — same shape as WorkGroupService.activate(). */
+    @Transactional
+    public CabDTO activate(Long id) {
+        Cab c = findOrThrow(id);
+        c.setIsActive(true);
+        return mapToDTO(cabRepo.save(c));
+    }
+
     private Cab findOrThrow(Long id) {
         return cabRepo.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Cab not found with id: " + id));

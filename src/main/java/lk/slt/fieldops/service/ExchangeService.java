@@ -100,6 +100,14 @@ public class ExchangeService {
         return mapToDTO(exchangeRepo.save(e));
     }
 
+    /** Exchange/CAB/DP/Circuit hierarchy gap #1 (QA_Compliance_Consolidated_Report.md) — same shape as WorkGroupService.activate(). */
+    @Transactional
+    public ExchangeDTO activate(Long id) {
+        Exchange e = findOrThrow(id);
+        e.setIsActive(true);
+        return mapToDTO(exchangeRepo.save(e));
+    }
+
     /**
      * H1b: nearest Exchange to (lat, lon), searched ONLY among Exchanges that have real
      * coordinates (271/377 as of 2026-08-20 — see fieldops/scripts/geocode_master_data.py). The

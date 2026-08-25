@@ -72,4 +72,12 @@ public class CircuitController {
     public ResponseEntity<CircuitDTO> deactivate(@PathVariable Long id) {
         return ResponseEntity.ok(circuitService.deactivate(id));
     }
+
+    // Exchange/CAB/DP/Circuit hierarchy gap #1 (QA_Compliance_Consolidated_Report.md) — same
+    // route shape as WorkGroupController/OpmcController's own PATCH /{id}/activate.
+    @PatchMapping("/{id}/activate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN')")
+    public ResponseEntity<CircuitDTO> activate(@PathVariable Long id) {
+        return ResponseEntity.ok(circuitService.activate(id));
+    }
 }
