@@ -6,8 +6,10 @@ import lk.slt.fieldops.repository.FaultHistoryRepository;
 import lk.slt.fieldops.repository.FaultNoteRepository;
 import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.UserRepository;
+import lk.slt.fieldops.repository.WorkGroupRepository;
 import lk.slt.fieldops.websocket
         .WebSocketEventPublisher;
+import org.springframework.security.access.AccessDeniedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,8 +37,8 @@ public class FaultAssignmentService {
             faultNoteRepository;
     private final WebSocketEventPublisher
             webSocketEventPublisher;
-    private final JobCreationService
-            jobCreationService;
+    private final WorkGroupRepository
+            workGroupRepository;
 
     private static final DateTimeFormatter
             FMT = DateTimeFormatter
@@ -53,9 +55,9 @@ public class FaultAssignmentService {
 
         log.info(
                 "Assigning fault {} to "
-                        + "technician {}",
+                        + "work group {}",
                 faultId,
-                req.getTechnicianId());
+                req.getWorkGroupId());
 
         Fault fault = faultRepository
                 .findById(faultId)
@@ -64,13 +66,26 @@ public class FaultAssignmentService {
                                 "Fault not found: "
                                         + faultId));
 
-        User technician = userRepository
-                .findById(req.getTechnicianId())
+        WorkGroup workGroup = workGroupRepository
+                .findById(req.getWorkGroupId())
                 .orElseThrow(() ->
                         new RuntimeException(
-                                "Technician not found: "
-                                        + req
-                                        .getTechnicianId()));
+                                "Work Group not found: "
+                                        + req.getWorkGroupId()));
+
+        if (!Boolean.TRUE.equals(workGroup.getIsActive())) {
+            throw new RuntimeException(
+                    "Work Group " + workGroup.getId() + " is not active.");
+        }
+        // A fault can only ever go to a Work Group in its own OPMC — this holds
+        // regardless of caller role (Admin or Super Admin), since assigning
+        // cross-OPMC never makes sense even when the caller is unscoped.
+        if (workGroup.getOpmc() == null
+                || !workGroup.getOpmc().getId().equals(fault.getOpmcId())) {
+            throw new RuntimeException(
+                    "Work Group " + workGroup.getId()
+                            + " does not belong to this fault's OPMC.");
+        }
 
         User admin = userRepository
                 .findById(adminId)
@@ -92,14 +107,19 @@ public class FaultAssignmentService {
                             + " fault");
         }
 
-        String previousTech =
-                fault.getAssignedTeamLeadName() != null
-                        ? fault.getAssignedTeamLeadName()
+        String previousWorkGroup =
+                fault.getWorkGroupName() != null
+                        ? fault.getWorkGroupName()
                         : "Unassigned";
 
-        // Update fault
-        fault.setAssignedTeamLeadId(technician.getId());
-        fault.setAssignedTeamLeadName(technician.getFullName());
+        // Update fault — SRS 5.5.1: assigned to the Work Group, not a person.
+        // The Team Lead of that Work Group decides further routing (self-assign
+        // or dispatch to a Technician), so assignedTeamLeadId stays null here.
+        fault.setWorkGroupId(workGroup.getId());
+        fault.setWorkGroupName(workGroup.getName());
+        fault.setAssignedTeamLeadId(null);
+        fault.setAssignedTeamLeadName(null);
+        fault.setAssignedAt(LocalDateTime.now());
         if (req.getPriority() != null) {
             try {
                 fault.setPriority(
@@ -125,28 +145,16 @@ public class FaultAssignmentService {
 
         faultRepository.save(fault);
 
-        // FR-17 (SRS 5.5.1): Admin can assign a fault directly to a Technician,
-        // not only to a Team Lead. When the target is a Technician, there's no
-        // Team Lead to later dispatch a Job via JobService.createJob, so we
-        // create the Job here instead — otherwise the fault would show as
-        // "assigned" but never actually reach the technician's job list.
-        // Team Lead targets are unaffected: they still create Jobs themselves
-        // via JobService.createJob once they've triaged the fault.
-        if (technician.getRole() == User.Role.TECHNICIAN) {
-            jobCreationService.createJobForFaultAssignment(
-                    fault, technician, req.getPriority());
-        }
-
         // Save history event
         saveHistoryEvent(
                 fault, admin,
-                "FAULT_ASSIGNED",
+                "FAULT_ASSIGNED_TO_WORK_GROUP",
                 "🔧",
-                "Fault Assigned",
-                "Fault assigned to "
-                        + technician.getFullName(),
-                previousTech,
-                technician.getFullName(),
+                "Fault Assigned to Work Group",
+                "Fault assigned to Work Group: "
+                        + workGroup.getName(),
+                previousWorkGroup,
+                workGroup.getName(),
                 false);
 
         // Add note if provided
@@ -158,20 +166,14 @@ public class FaultAssignmentService {
         }
 
         // WebSocket notifications
-        if (req.isNotifyTechnician()) {
-            webSocketEventPublisher
-                    .publishTechnicianAssigned(
-                            fault.getCustomerId() != null
-                                    ? fault.getCustomerId().toString()
-                                    : "",
-                            technician.getFullName(),
-                            faultId.toString());
-
+        User teamLead = workGroup.getTeamLead();
+        if (req.isNotifyTeamLead() && teamLead != null) {
             webSocketEventPublisher.sendToUser(
-                    technician.getId().toString(),
-                    "New Job Assigned",
+                    teamLead.getId().toString(),
+                    "New Fault in Your Work Group",
                     "Fault #" + faultId
-                            + " has been assigned to you",
+                            + " has been assigned to "
+                            + workGroup.getName(),
                     "FAULT_ASSIGNED");
         }
 
@@ -179,18 +181,16 @@ public class FaultAssignmentService {
                 && fault.getCustomerId() != null) {
             webSocketEventPublisher.sendToUser(
                     fault.getCustomerId().toString(),
-                    "Technician Assigned",
-                    technician.getFullName()
-                            + " has been assigned "
-                            + "to your fault #"
-                            + faultId,
+                    "Fault Assigned",
+                    "Your fault #" + faultId
+                            + " has been assigned to a field team",
                     "TECHNICIAN_ASSIGNED");
         }
 
         log.info(
-                "Fault {} assigned to {} by {}",
+                "Fault {} assigned to work group {} by {}",
                 faultId,
-                technician.getFullName(),
+                workGroup.getName(),
                 admin.getFullName());
 
         return FaultAssignmentDTO
@@ -200,11 +200,10 @@ public class FaultAssignmentService {
                         fault.getStatus() != null
                                 ? fault.getStatus().name()
                                 : "ASSIGNED")
-                .technicianId(technician.getId())
-                .technicianName(
-                        technician.getFullName())
-                .technicianPhone(
-                        technician.getPhone())
+                .workGroupId(workGroup.getId())
+                .workGroupName(workGroup.getName())
+                .teamLeadId(teamLead != null ? teamLead.getId() : null)
+                .teamLeadName(teamLead != null ? teamLead.getFullName() : null)
                 .priority(
                         fault.getPriority() != null
                                 ? fault.getPriority()
@@ -217,9 +216,9 @@ public class FaultAssignmentService {
                 .assignedAt(LocalDateTime.now())
                 .message("Fault successfully "
                         + "assigned to "
-                        + technician.getFullName())
+                        + workGroup.getName())
                 .notificationSent(
-                        req.isNotifyTechnician())
+                        req.isNotifyTeamLead())
                 .build();
     }
 
@@ -234,9 +233,9 @@ public class FaultAssignmentService {
 
         log.info(
                 "Reassigning fault {} to "
-                        + "technician {}",
+                        + "work group {}",
                 faultId,
-                req.getNewTechnicianId());
+                req.getNewWorkGroupId());
 
         Fault fault = faultRepository
                 .findById(faultId)
@@ -245,13 +244,23 @@ public class FaultAssignmentService {
                                 "Fault not found: "
                                         + faultId));
 
-        User newTech = userRepository
-                .findById(req.getNewTechnicianId())
+        WorkGroup newWorkGroup = workGroupRepository
+                .findById(req.getNewWorkGroupId())
                 .orElseThrow(() ->
                         new RuntimeException(
-                                "Technician not found: "
-                                        + req
-                                        .getNewTechnicianId()));
+                                "Work Group not found: "
+                                        + req.getNewWorkGroupId()));
+
+        if (!Boolean.TRUE.equals(newWorkGroup.getIsActive())) {
+            throw new RuntimeException(
+                    "Work Group " + newWorkGroup.getId() + " is not active.");
+        }
+        if (newWorkGroup.getOpmc() == null
+                || !newWorkGroup.getOpmc().getId().equals(fault.getOpmcId())) {
+            throw new RuntimeException(
+                    "Work Group " + newWorkGroup.getId()
+                            + " does not belong to this fault's OPMC.");
+        }
 
         User admin = userRepository
                 .findById(adminId)
@@ -260,35 +269,44 @@ public class FaultAssignmentService {
                                 "Admin not found: "
                                         + adminId));
 
-        Long prevTechId = fault.getAssignedTeamLeadId();
-        String prevName = fault.getAssignedTeamLeadName() != null
-                ? fault.getAssignedTeamLeadName()
+        // Check if fault is already completed — same guard as assignFault
+        // (its sibling method), previously missing here entirely.
+        if (fault.getStatus() != null
+                && ("COMPLETED".equals(
+                fault.getStatus().name())
+                || "CANCELLED".equals(
+                fault.getStatus().name()))) {
+            throw new RuntimeException(
+                    "Cannot reassign a "
+                            + fault.getStatus().name()
+                            .toLowerCase()
+                            + " fault");
+        }
+
+        Long prevTeamLeadId = fault.getAssignedTeamLeadId();
+        String prevWorkGroupName = fault.getWorkGroupName() != null
+                ? fault.getWorkGroupName()
                 : "Unassigned";
 
-        // Notify previous technician
-        if (req.isNotifyPreviousTechnician()
-                && prevTechId != null) {
+        // Notify previous Team Lead, if the fault had already been picked up
+        if (req.isNotifyPreviousTeamLead()
+                && prevTeamLeadId != null) {
             webSocketEventPublisher.sendToUser(
-                    prevTechId.toString(),
-                    "Job Reassigned",
+                    prevTeamLeadId.toString(),
+                    "Fault Reassigned",
                     "Fault #" + faultId
-                            + " has been reassigned. "
+                            + " has been reassigned to another Work Group. "
                             + "Reason: " + req.getReason(),
                     "FAULT_REASSIGNED");
         }
 
-        // Update fault
-        fault.setAssignedTeamLeadId(newTech.getId());
-        fault.setAssignedTeamLeadName(newTech.getFullName());
+        // Update fault — reassigning always resets to "in the new Work Group's
+        // queue", clearing any prior self-assignment/dispatch under the old one.
+        fault.setWorkGroupId(newWorkGroup.getId());
+        fault.setWorkGroupName(newWorkGroup.getName());
+        fault.setAssignedTeamLeadId(null);
+        fault.setAssignedTeamLeadName(null);
         faultRepository.save(fault);
-
-        // Same FR-17 direct-to-Technician case as assignFault() above: if the
-        // new assignee is a Technician (not a Team Lead), there's no Team Lead
-        // to dispatch a Job via JobService.createJob, so create it here.
-        if (newTech.getRole() == User.Role.TECHNICIAN) {
-            jobCreationService.createJobForFaultAssignment(
-                    fault, newTech, null);
-        }
 
         // Save history event
         saveHistoryEvent(
@@ -297,19 +315,19 @@ public class FaultAssignmentService {
                 "🔄",
                 "Fault Reassigned",
                 "Reassigned from "
-                        + prevName
+                        + prevWorkGroupName
                         + " to "
-                        + newTech.getFullName()
+                        + newWorkGroup.getName()
                         + ". Reason: "
                         + req.getReason(),
-                prevName,
-                newTech.getFullName(),
+                prevWorkGroupName,
+                newWorkGroup.getName(),
                 false);
 
         // Add note
         String noteContent =
                 "Reassigned to "
-                        + newTech.getFullName()
+                        + newWorkGroup.getName()
                         + ". Reason: "
                         + req.getReason()
                         + (req.getNotes() != null
@@ -319,13 +337,14 @@ public class FaultAssignmentService {
         addNote(fault, admin,
                 noteContent, "REASSIGNMENT", true);
 
-        // Notify new technician
-        if (req.isNotifyTechnician()) {
+        // Notify new Work Group's Team Lead
+        User newTeamLead = newWorkGroup.getTeamLead();
+        if (req.isNotifyTeamLead() && newTeamLead != null) {
             webSocketEventPublisher.sendToUser(
-                    newTech.getId().toString(),
-                    "Fault Assigned to You",
+                    newTeamLead.getId().toString(),
+                    "Fault Assigned to Your Work Group",
                     "Fault #" + faultId
-                            + " has been reassigned to you",
+                            + " has been reassigned to " + newWorkGroup.getName(),
                     "FAULT_ASSIGNED");
         }
 
@@ -336,17 +355,18 @@ public class FaultAssignmentService {
                         fault.getStatus() != null
                                 ? fault.getStatus().name()
                                 : "ASSIGNED")
-                .technicianId(newTech.getId())
-                .technicianName(newTech.getFullName())
-                .technicianPhone(newTech.getPhone())
+                .workGroupId(newWorkGroup.getId())
+                .workGroupName(newWorkGroup.getName())
+                .teamLeadId(newTeamLead != null ? newTeamLead.getId() : null)
+                .teamLeadName(newTeamLead != null ? newTeamLead.getFullName() : null)
                 .assignedBy(admin.getFullName())
                 .assignedAt(LocalDateTime.now())
                 .message("Fault reassigned from "
-                        + prevName
+                        + prevWorkGroupName
                         + " to "
-                        + newTech.getFullName())
+                        + newWorkGroup.getName())
                 .notificationSent(
-                        req.isNotifyTechnician())
+                        req.isNotifyTeamLead())
                 .build();
     }
 
@@ -459,17 +479,21 @@ public class FaultAssignmentService {
 
         log.info(
                 "Bulk assigning {} faults to "
-                        + "technician {}",
+                        + "work group {}",
                 req.getFaultIds().size(),
-                req.getTechnicianId());
+                req.getWorkGroupId());
 
-        User technician = userRepository
-                .findById(req.getTechnicianId())
+        WorkGroup workGroup = workGroupRepository
+                .findById(req.getWorkGroupId())
                 .orElseThrow(() ->
                         new RuntimeException(
-                                "Technician not found: "
-                                        + req
-                                        .getTechnicianId()));
+                                "Work Group not found: "
+                                        + req.getWorkGroupId()));
+
+        if (!Boolean.TRUE.equals(workGroup.getIsActive())) {
+            throw new RuntimeException(
+                    "Work Group " + workGroup.getId() + " is not active.");
+        }
 
         User admin = userRepository
                 .findById(adminId)
@@ -514,8 +538,19 @@ public class FaultAssignmentService {
                     continue;
                 }
 
-                fault.setAssignedTeamLeadId(technician.getId());
-                fault.setAssignedTeamLeadName(technician.getFullName());
+                if (workGroup.getOpmc() == null
+                        || !workGroup.getOpmc().getId().equals(fault.getOpmcId())) {
+                    failedIds.add(faultId);
+                    errors.add("Fault #" + faultId
+                            + " does not belong to Work Group " + workGroup.getId()
+                            + "'s OPMC");
+                    continue;
+                }
+
+                fault.setWorkGroupId(workGroup.getId());
+                fault.setWorkGroupName(workGroup.getName());
+                fault.setAssignedTeamLeadId(null);
+                fault.setAssignedTeamLeadName(null);
 
                 if (req.getPriority() != null) {
                     try {
@@ -544,14 +579,13 @@ public class FaultAssignmentService {
 
                 saveHistoryEvent(
                         fault, admin,
-                        "FAULT_ASSIGNED",
+                        "FAULT_ASSIGNED_TO_WORK_GROUP",
                         "🔧",
-                        "Bulk Assigned",
-                        "Bulk assigned to "
-                                + technician
-                                .getFullName(),
+                        "Bulk Assigned to Work Group",
+                        "Bulk assigned to Work Group "
+                                + workGroup.getName(),
                         "Unassigned",
-                        technician.getFullName(),
+                        workGroup.getName(),
                         false);
 
                 successIds.add(faultId);
@@ -566,16 +600,18 @@ public class FaultAssignmentService {
             }
         }
 
-        // Notify technician
-        if (req.isNotifyTechnician()
+        // Notify the Work Group's Team Lead
+        User bulkTeamLead = workGroup.getTeamLead();
+        if (req.isNotifyTeamLead()
+                && bulkTeamLead != null
                 && !successIds.isEmpty()) {
             webSocketEventPublisher.sendToUser(
-                    technician.getId().toString(),
+                    bulkTeamLead.getId().toString(),
                     successIds.size()
-                            + " New Jobs Assigned",
+                            + " New Faults Assigned",
                     successIds.size()
                             + " faults have been "
-                            + "assigned to you",
+                            + "assigned to " + workGroup.getName(),
                     "FAULT_ASSIGNED");
         }
 
@@ -595,6 +631,153 @@ public class FaultAssignmentService {
                 .failedFaultIds(failedIds)
                 .errors(errors)
                 .processedAt(LocalDateTime.now())
+                .build();
+    }
+
+    // ─── Self-Assign (SRS 5.5.1 — Team Lead "Assign to Me") ──────────────
+
+    @Transactional
+    public FaultAssignmentDTO.AssignmentResponse
+    selfAssignFault(
+            Long faultId,
+            FaultAssignmentDTO.SelfAssignRequest req,
+            Long teamLeadId) {
+
+        Fault fault = faultRepository
+                .findById(faultId)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Fault not found: " + faultId));
+
+        User teamLead = userRepository
+                .findById(teamLeadId)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Team lead not found: " + teamLeadId));
+
+        if (fault.getWorkGroupId() == null
+                || teamLead.getWorkgroup() == null
+                || !fault.getWorkGroupId().equals(teamLead.getWorkgroup().getId())) {
+            throw new AccessDeniedException(
+                    "Fault #" + faultId + " is not in your Work Group's queue.");
+        }
+
+        if (fault.getAssignedTeamLeadId() != null) {
+            throw new RuntimeException(
+                    "Fault #" + faultId + " has already been claimed by "
+                            + fault.getAssignedTeamLeadName() + ".");
+        }
+
+        fault.setAssignedTeamLeadId(teamLead.getId());
+        fault.setAssignedTeamLeadName(teamLead.getFullName());
+        faultRepository.save(fault);
+
+        saveHistoryEvent(
+                fault, teamLead,
+                "TEAM_LEAD_SELF_ASSIGNED",
+                "🙋",
+                "Team Lead Self-Assigned",
+                teamLead.getFullName() + " took this fault directly from "
+                        + fault.getWorkGroupName() + "'s queue.",
+                "Unassigned",
+                teamLead.getFullName(),
+                false);
+
+        if (req != null && req.getNotes() != null && !req.getNotes().isEmpty()) {
+            addNote(fault, teamLead, req.getNotes(), "ASSIGNMENT", true);
+        }
+
+        return FaultAssignmentDTO
+                .AssignmentResponse.builder()
+                .faultId(faultId)
+                .faultStatus(fault.getStatus() != null ? fault.getStatus().name() : "ASSIGNED")
+                .workGroupId(fault.getWorkGroupId())
+                .workGroupName(fault.getWorkGroupName())
+                .teamLeadId(teamLead.getId())
+                .teamLeadName(teamLead.getFullName())
+                .assignedBy(teamLead.getFullName())
+                .assignedAt(LocalDateTime.now())
+                .message(teamLead.getFullName() + " self-assigned fault #" + faultId)
+                .notificationSent(false)
+                .build();
+    }
+
+    // ─── Transfer to Admin (SRS 5.5.1) ────────────────────────────────────
+    // Mirrors EOD "Forward to Admin" (5.4.2.1) and Issue Mismatch (5.3.1.2):
+    // fault returns to the unassigned pool (REPORTED) for the Admin to
+    // manually pick a different, capable Work Group. Full audit trail.
+
+    @Transactional
+    public FaultAssignmentDTO.AssignmentResponse
+    transferToAdmin(
+            Long faultId,
+            FaultAssignmentDTO.TransferToAdminRequest req,
+            Long teamLeadId) {
+
+        Fault fault = faultRepository
+                .findById(faultId)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Fault not found: " + faultId));
+
+        User teamLead = userRepository
+                .findById(teamLeadId)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Team lead not found: " + teamLeadId));
+
+        if (fault.getWorkGroupId() == null
+                || teamLead.getWorkgroup() == null
+                || !fault.getWorkGroupId().equals(teamLead.getWorkgroup().getId())) {
+            throw new AccessDeniedException(
+                    "Fault #" + faultId + " is not in your Work Group.");
+        }
+
+        if (fault.getStatus() == Fault.FaultStatus.COMPLETED
+                || fault.getStatus() == Fault.FaultStatus.CANCELLED) {
+            throw new RuntimeException(
+                    "Cannot transfer a " + fault.getStatus().name().toLowerCase() + " fault.");
+        }
+
+        String previousWorkGroup = fault.getWorkGroupName();
+
+        fault.setStatus(Fault.FaultStatus.REPORTED);
+        fault.setWorkGroupId(null);
+        fault.setWorkGroupName(null);
+        fault.setAssignedTeamLeadId(null);
+        fault.setAssignedTeamLeadName(null);
+        faultRepository.save(fault);
+
+        saveHistoryEvent(
+                fault, teamLead,
+                "TRANSFERRED_TO_ADMIN",
+                "↩️",
+                "Transferred back to Admin",
+                teamLead.getFullName() + " transferred this fault from "
+                        + previousWorkGroup + " back to Admin. Reason: " + req.getReason()
+                        + (req.getNotes() != null && !req.getNotes().isBlank()
+                                ? " | " + req.getNotes() : ""),
+                previousWorkGroup,
+                "Admin queue (unassigned)",
+                false);
+
+        webSocketEventPublisher.sendToRole(
+                "admin",
+                "Fault Transferred Back",
+                "Fault #" + faultId + " was transferred back by "
+                        + teamLead.getFullName() + " from " + previousWorkGroup
+                        + ". Reason: " + req.getReason(),
+                "FAULT_TRANSFERRED_TO_ADMIN");
+
+        return FaultAssignmentDTO
+                .AssignmentResponse.builder()
+                .faultId(faultId)
+                .faultStatus(fault.getStatus().name())
+                .assignedBy(teamLead.getFullName())
+                .assignedAt(LocalDateTime.now())
+                .message("Fault #" + faultId + " transferred back to Admin from "
+                        + previousWorkGroup)
+                .notificationSent(true)
                 .build();
     }
 
