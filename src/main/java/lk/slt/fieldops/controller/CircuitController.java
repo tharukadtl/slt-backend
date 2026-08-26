@@ -45,14 +45,17 @@ public class CircuitController {
         return ResponseEntity.status(HttpStatus.CREATED).body(circuitService.create(request));
     }
 
+    // activeOnly: Exchange/Cab/Dp/Circuit + WorkGroup Minor (QA_Compliance_Consolidated_Report.md),
+    // same convention as GET /api/users; defaults to false (unchanged behavior).
     @GetMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','TEAM_LEAD')")
     public ResponseEntity<List<CircuitDTO>> getAll(@RequestParam(required = false) Long dpId,
+                                                     @RequestParam(required = false, defaultValue = "false") boolean activeOnly,
                                                      @AuthenticationPrincipal Long callerId) {
         Long opmcFilter = opmcGuard.resolveOpmcFilter(callerId);
         return ResponseEntity.ok(dpId != null
-            ? circuitService.getByDp(dpId, opmcFilter)
-            : circuitService.getAll(opmcFilter));
+            ? circuitService.getByDp(dpId, opmcFilter, activeOnly)
+            : circuitService.getAll(opmcFilter, activeOnly));
     }
 
     @GetMapping("/{id}")

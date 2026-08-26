@@ -55,18 +55,29 @@ public class CircuitService {
         return getAll(null);
     }
 
+    /** @deprecated retained for source compatibility; delegates with activeOnly=false (current default — show all). */
+    @Transactional(readOnly = true)
+    public List<CircuitDTO> getAll(Long opmcFilter) {
+        return getAll(opmcFilter, false);
+    }
+
     /**
      * Stage F #2/#3-style OPMC scoping (Exchange/Cab/Dp/Circuit gap #2, QA_Compliance_Consolidated_Report.md)
      * — same pattern as {@code PaymentService.getAll(Long)}. A Circuit's OPMC is resolved via
      * DP -> Cab -> Exchange, and both Circuit.dp and Cab.exchange are nullable, so a Circuit whose
      * chain is broken anywhere resolves to opmcId=null and is filtered out for every non-Super-Admin
      * caller — fail closed, same as {@link lk.slt.fieldops.shared.OpmcAccessGuard} everywhere else.
+     * {@code activeOnly} wires up {@code CircuitRepository.findByIsActiveTrue()}
+     * (Exchange/Cab/Dp/Circuit + WorkGroup Minor, QA_Compliance_Consolidated_Report.md).
      * @param opmcFilter resolved by the caller via OpmcAccessGuard#resolveOpmcFilter, never trusted
      *                   from client input. null means unscoped (Super Admin).
+     * @param activeOnly false (default) preserves existing behavior — all Circuits regardless of
+     *                    {@code isActive}. true restricts to active ones only.
      */
     @Transactional(readOnly = true)
-    public List<CircuitDTO> getAll(Long opmcFilter) {
-        return circuitRepo.findAll().stream()
+    public List<CircuitDTO> getAll(Long opmcFilter, boolean activeOnly) {
+        List<Circuit> base = activeOnly ? circuitRepo.findByIsActiveTrue() : circuitRepo.findAll();
+        return base.stream()
             .filter(c -> opmcFilter == null || opmcFilter.equals(opmcIdOf(c)))
             .map(this::mapToDTO).collect(Collectors.toList());
     }
@@ -77,16 +88,25 @@ public class CircuitService {
         return getByDp(dpId, null);
     }
 
+    /** @deprecated retained for source compatibility; delegates with activeOnly=false (current default — show all). */
+    @Transactional(readOnly = true)
+    public List<CircuitDTO> getByDp(Long dpId, Long opmcFilter) {
+        return getByDp(dpId, opmcFilter, false);
+    }
+
     /**
      * @param dpId       the DP to list Circuits under — caller-supplied, NOT trusted for access
      *                   control on its own (see opmcFilter).
-     * @param opmcFilter same semantics as {@link #getAll(Long)}. Applied after the query so passing
-     *                   a DP belonging to another OPMC can never surface real rows.
+     * @param opmcFilter same semantics as {@link #getAll(Long, boolean)}. Applied after the query so
+     *                   passing a DP belonging to another OPMC can never surface real rows.
+     * @param activeOnly same semantics as {@link #getAll(Long, boolean)}, composed as an additional
+     *                   in-memory filter since {@code findByDpId} has no active-scoped variant.
      */
     @Transactional(readOnly = true)
-    public List<CircuitDTO> getByDp(Long dpId, Long opmcFilter) {
+    public List<CircuitDTO> getByDp(Long dpId, Long opmcFilter, boolean activeOnly) {
         return circuitRepo.findByDpId(dpId).stream()
             .filter(c -> opmcFilter == null || opmcFilter.equals(opmcIdOf(c)))
+            .filter(c -> !activeOnly || Boolean.TRUE.equals(c.getIsActive()))
             .map(this::mapToDTO).collect(Collectors.toList());
     }
 

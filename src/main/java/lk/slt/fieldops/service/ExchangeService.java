@@ -54,16 +54,27 @@ public class ExchangeService {
         return getAll(null);
     }
 
+    /** @deprecated retained for source compatibility; delegates with activeOnly=false (current default — show all). */
+    @Transactional(readOnly = true)
+    public List<ExchangeDTO> getAll(Long opmcFilter) {
+        return getAll(opmcFilter, false);
+    }
+
     /**
      * Stage F #2/#3-style OPMC scoping (Exchange/Cab/Dp/Circuit gap #2, QA_Compliance_Consolidated_Report.md)
-     * — same pattern as {@code PaymentService.getAll(Long)}.
+     * — same pattern as {@code PaymentService.getAll(Long)}. {@code activeOnly} wires up
+     * {@code ExchangeRepository.findByIsActiveTrue()} (Exchange/Cab/Dp/Circuit + WorkGroup Minor,
+     * QA_Compliance_Consolidated_Report.md — the method existed but nothing ever called it).
      * @param opmcFilter resolved by the caller via {@link lk.slt.fieldops.shared.OpmcAccessGuard#resolveOpmcFilter},
      *                   never trusted from client input. null means unscoped (Super Admin); otherwise only
      *                   Exchanges belonging to this OPMC.
+     * @param activeOnly false (default) preserves existing behavior — all Exchanges regardless of
+     *                    {@code isActive}. true restricts to active ones only.
      */
     @Transactional(readOnly = true)
-    public List<ExchangeDTO> getAll(Long opmcFilter) {
-        return exchangeRepo.findAll().stream()
+    public List<ExchangeDTO> getAll(Long opmcFilter, boolean activeOnly) {
+        List<Exchange> base = activeOnly ? exchangeRepo.findByIsActiveTrue() : exchangeRepo.findAll();
+        return base.stream()
             .filter(e -> opmcFilter == null || opmcFilter.equals(opmcIdOf(e)))
             .map(this::mapToDTO).collect(Collectors.toList());
     }
@@ -74,18 +85,28 @@ public class ExchangeService {
         return getByOpmc(opmcId, null);
     }
 
+    /** @deprecated retained for source compatibility; delegates with activeOnly=false (current default — show all). */
+    @Transactional(readOnly = true)
+    public List<ExchangeDTO> getByOpmc(Long opmcId, Long opmcFilter) {
+        return getByOpmc(opmcId, opmcFilter, false);
+    }
+
     /**
      * @param opmcId     the OPMC to list Exchanges under — caller-supplied, NOT trusted for access
      *                   control on its own (a non-Super-Admin caller passing another OPMC's id gets
      *                   an empty list, not that OPMC's data — see opmcFilter).
-     * @param opmcFilter same semantics as {@link #getAll(Long)}. Applied after the query so passing
-     *                   someone else's opmcId can never surface real rows regardless of what the
-     *                   query itself returns.
+     * @param opmcFilter same semantics as {@link #getAll(Long, boolean)}. Applied after the query so
+     *                   passing someone else's opmcId can never surface real rows regardless of what
+     *                   the query itself returns.
+     * @param activeOnly same semantics as {@link #getAll(Long, boolean)}. {@code findByOpmcId} has no
+     *                   active-scoped variant, so this composes as an additional in-memory filter on
+     *                   the same stream rather than a second repository query — same end result.
      */
     @Transactional(readOnly = true)
-    public List<ExchangeDTO> getByOpmc(Long opmcId, Long opmcFilter) {
+    public List<ExchangeDTO> getByOpmc(Long opmcId, Long opmcFilter, boolean activeOnly) {
         return exchangeRepo.findByOpmcId(opmcId).stream()
             .filter(e -> opmcFilter == null || opmcFilter.equals(opmcIdOf(e)))
+            .filter(e -> !activeOnly || Boolean.TRUE.equals(e.getIsActive()))
             .map(this::mapToDTO).collect(Collectors.toList());
     }
 

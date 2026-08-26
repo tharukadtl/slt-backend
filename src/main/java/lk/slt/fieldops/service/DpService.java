@@ -51,18 +51,29 @@ public class DpService {
         return getAll(null);
     }
 
+    /** @deprecated retained for source compatibility; delegates with activeOnly=false (current default — show all). */
+    @Transactional(readOnly = true)
+    public List<DpDTO> getAll(Long opmcFilter) {
+        return getAll(opmcFilter, false);
+    }
+
     /**
      * Stage F #2/#3-style OPMC scoping (Exchange/Cab/Dp/Circuit gap #2, QA_Compliance_Consolidated_Report.md)
      * — same pattern as {@code PaymentService.getAll(Long)}. A DP's OPMC is resolved via
      * Cab -> Exchange, and Cab.exchange is nullable, so a DP under a Cab with a broken Exchange
      * link resolves to opmcId=null and is filtered out for every non-Super-Admin caller — fail
      * closed, same as {@link lk.slt.fieldops.shared.OpmcAccessGuard} everywhere else.
+     * {@code activeOnly} wires up {@code DpRepository.findByIsActiveTrue()} (Exchange/Cab/Dp/Circuit
+     * + WorkGroup Minor, QA_Compliance_Consolidated_Report.md).
      * @param opmcFilter resolved by the caller via OpmcAccessGuard#resolveOpmcFilter, never trusted
      *                   from client input. null means unscoped (Super Admin).
+     * @param activeOnly false (default) preserves existing behavior — all DPs regardless of
+     *                    {@code isActive}. true restricts to active ones only.
      */
     @Transactional(readOnly = true)
-    public List<DpDTO> getAll(Long opmcFilter) {
-        return dpRepo.findAll().stream()
+    public List<DpDTO> getAll(Long opmcFilter, boolean activeOnly) {
+        List<Dp> base = activeOnly ? dpRepo.findByIsActiveTrue() : dpRepo.findAll();
+        return base.stream()
             .filter(dp -> opmcFilter == null || opmcFilter.equals(opmcIdOf(dp)))
             .map(this::mapToDTO).collect(Collectors.toList());
     }
@@ -73,16 +84,25 @@ public class DpService {
         return getByCab(cabId, null);
     }
 
+    /** @deprecated retained for source compatibility; delegates with activeOnly=false (current default — show all). */
+    @Transactional(readOnly = true)
+    public List<DpDTO> getByCab(Long cabId, Long opmcFilter) {
+        return getByCab(cabId, opmcFilter, false);
+    }
+
     /**
      * @param cabId      the Cab to list DPs under — caller-supplied, NOT trusted for access
      *                   control on its own (see opmcFilter).
-     * @param opmcFilter same semantics as {@link #getAll(Long)}. Applied after the query so passing
-     *                   a Cab belonging to another OPMC can never surface real rows.
+     * @param opmcFilter same semantics as {@link #getAll(Long, boolean)}. Applied after the query so
+     *                   passing a Cab belonging to another OPMC can never surface real rows.
+     * @param activeOnly same semantics as {@link #getAll(Long, boolean)}, composed as an additional
+     *                   in-memory filter since {@code findByCabId} has no active-scoped variant.
      */
     @Transactional(readOnly = true)
-    public List<DpDTO> getByCab(Long cabId, Long opmcFilter) {
+    public List<DpDTO> getByCab(Long cabId, Long opmcFilter, boolean activeOnly) {
         return dpRepo.findByCabId(cabId).stream()
             .filter(dp -> opmcFilter == null || opmcFilter.equals(opmcIdOf(dp)))
+            .filter(dp -> !activeOnly || Boolean.TRUE.equals(dp.getIsActive()))
             .map(this::mapToDTO).collect(Collectors.toList());
     }
 

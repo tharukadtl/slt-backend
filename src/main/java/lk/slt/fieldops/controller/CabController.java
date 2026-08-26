@@ -33,14 +33,17 @@ public class CabController {
     }
 
     // H1c: TEAM_LEAD read access, same reason as ExchangeController -- see its comment.
+    // activeOnly: Exchange/Cab/Dp/Circuit + WorkGroup Minor (QA_Compliance_Consolidated_Report.md),
+    // same convention as GET /api/users; defaults to false (unchanged behavior).
     @GetMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','TEAM_LEAD')")
     public ResponseEntity<List<CabDTO>> getAll(@RequestParam(required = false) Long exchangeId,
+                                                 @RequestParam(required = false, defaultValue = "false") boolean activeOnly,
                                                  @AuthenticationPrincipal Long callerId) {
         Long opmcFilter = opmcGuard.resolveOpmcFilter(callerId);
         return ResponseEntity.ok(exchangeId != null
-            ? cabService.getByExchange(exchangeId, opmcFilter)
-            : cabService.getAll(opmcFilter));
+            ? cabService.getByExchange(exchangeId, opmcFilter, activeOnly)
+            : cabService.getAll(opmcFilter, activeOnly));
     }
 
     @GetMapping("/{id}")

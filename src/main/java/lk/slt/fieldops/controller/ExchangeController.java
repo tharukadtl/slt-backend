@@ -36,14 +36,19 @@ public class ExchangeController {
     // picker (Opmc -> Exchange -> Cab -> Dp -> Circuit) can be walked from the Team Lead mobile
     // app -- mirrors CircuitController's own precedent (read opened to TEAM_LEAD/TECHNICIAN
     // ahead of this exact use case). Mutation endpoints below are untouched.
+    // activeOnly: Exchange/Cab/Dp/Circuit + WorkGroup Minor (QA_Compliance_Consolidated_Report.md)
+    // — findByIsActiveTrue() existed on the repository but nothing ever called it. Same
+    // activeOnly-parameter convention as GET /api/users; defaults to false (unchanged behavior —
+    // all Exchanges regardless of isActive).
     @GetMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','TEAM_LEAD')")
     public ResponseEntity<List<ExchangeDTO>> getAll(@RequestParam(required = false) Long opmcId,
+                                                      @RequestParam(required = false, defaultValue = "false") boolean activeOnly,
                                                       @AuthenticationPrincipal Long callerId) {
         Long opmcFilter = opmcGuard.resolveOpmcFilter(callerId);
         return ResponseEntity.ok(opmcId != null
-            ? exchangeService.getByOpmc(opmcId, opmcFilter)
-            : exchangeService.getAll(opmcFilter));
+            ? exchangeService.getByOpmc(opmcId, opmcFilter, activeOnly)
+            : exchangeService.getAll(opmcFilter, activeOnly));
     }
 
     @GetMapping("/{id}")
