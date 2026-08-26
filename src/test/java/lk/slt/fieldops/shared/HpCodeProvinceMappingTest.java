@@ -97,19 +97,38 @@ class HpCodeProvinceMappingTest {
     }
 
     @Test
-    void sierraIsFlaggedNotMappedNotSilentlyExcluded() throws IOException {
+    void flaggedForHumanConfirmationIsNowEmpty() throws IOException {
+        // HROP/HKOP resolved 2026-08-26 (real, unambiguous Western Province towns); SIERRA reclassified
+        // the same day as a confirmed third-party contractor, not a genuinely open data question. Every
+        // code originally flagged is now closed one way or another — nothing sits at NEEDS_CONFIRMATION
+        // for any real row today.
+        assertEquals(Set.of(), HpCodeProvinceMapping.FLAGGED_FOR_HUMAN_CONFIRMATION);
         for (Row row : readRealFile()) {
-            if (!HpCodeProvinceMapping.FLAGGED_FOR_HUMAN_CONFIRMATION.contains(row.opmcCode())) continue;
-
             HpCodeProvinceMapping.Resolution res =
                 HpCodeProvinceMapping.resolve(row.opmcCode(), row.hpCode());
-            assertEquals(HpCodeProvinceMapping.Resolution.Kind.NEEDS_CONFIRMATION, res.getKind(),
-                row.opmcCode() + " must resolve as NEEDS_CONFIRMATION, not silently mapped or excluded");
+            assertFalse(res.getKind() == HpCodeProvinceMapping.Resolution.Kind.NEEDS_CONFIRMATION,
+                row.opmcCode() + " must not resolve NEEDS_CONFIRMATION — every real row is now closed");
         }
-        // HROP/HKOP resolved 2026-08-26 (real, unambiguous Western Province towns) and moved out —
-        // SIERRA is the one genuinely open item left: it isn't a place name, only SLT confirming what
-        // it actually is can resolve it honestly.
-        assertEquals(Set.of("SIERRA"), HpCodeProvinceMapping.FLAGGED_FOR_HUMAN_CONFIRMATION);
+    }
+
+    @Test
+    void sierraResolvesAsThirdPartyContractorNotFlaggedNotMapped() throws IOException {
+        // Confirmed 2026-08-26: SIERRA is a real third-party contractor entity, not a geographic OPMC —
+        // a different category from NON_GEOGRAPHIC_OPMC_CODES (real internal SLT units) and from
+        // FLAGGED_FOR_HUMAN_CONFIRMATION (a genuinely open question). It must resolve distinctly, not
+        // silently fall into either of those, and not resolve a Province despite its populated
+        // (misleading) HPCODE.
+        for (Row row : readRealFile()) {
+            if (!row.opmcCode().equals("SIERRA")) continue;
+            HpCodeProvinceMapping.Resolution res =
+                HpCodeProvinceMapping.resolve(row.opmcCode(), row.hpCode());
+            assertEquals(HpCodeProvinceMapping.Resolution.Kind.THIRD_PARTY_CONTRACTOR, res.getKind(),
+                "SIERRA must resolve THIRD_PARTY_CONTRACTOR, not NEEDS_CONFIRMATION, NON_GEOGRAPHIC, "
+                    + "or a Province via its populated HPCODE");
+        }
+        assertEquals(Set.of("SIERRA"), HpCodeProvinceMapping.THIRD_PARTY_CONTRACTOR_CODES);
+        assertFalse(HpCodeProvinceMapping.NON_GEOGRAPHIC_OPMC_CODES.contains("SIERRA"));
+        assertFalse(HpCodeProvinceMapping.FLAGGED_FOR_HUMAN_CONFIRMATION.contains("SIERRA"));
     }
 
     @Test
@@ -137,7 +156,8 @@ class HpCodeProvinceMappingTest {
             .filter(r -> r.opmcCode().equals("SIERRA")).findFirst().orElseThrow();
         assertEquals("DHRFM/CM", sierra.hpCode(),
             "SIERRA's HPCODE must be populated (unlike SLHQ/CSCT/etc.) — that's exactly why it's "
-                + "flagged for confirmation rather than treated as non-geographic");
+                + "resolved via THIRD_PARTY_CONTRACTOR_CODES (checked before any HPCODE-based path) "
+                + "rather than treated as non-geographic");
     }
 
     @Test
@@ -240,16 +260,17 @@ class HpCodeProvinceMappingTest {
 
     @Test
     void resolvedRowCountPlusExclusionsAccountForAllSixtyTwoRows() throws IOException {
-        int resolved = 0, nonGeographic = 0, needsConfirmation = 0, ambiguous = 0;
+        int resolved = 0, nonGeographic = 0, thirdPartyContractor = 0, needsConfirmation = 0, ambiguous = 0;
         for (Row row : readRealFile()) {
             HpCodeProvinceMapping.Resolution res =
                 HpCodeProvinceMapping.resolve(row.opmcCode(), row.hpCode());
             switch (res.getKind()) {
-                case RESOLVED             -> resolved++;
-                case NON_GEOGRAPHIC       -> nonGeographic++;
-                case NEEDS_CONFIRMATION   -> needsConfirmation++;
-                case AMBIGUOUS_HPCODE     -> ambiguous++;
-                case UNKNOWN_HPCODE       -> throw new AssertionError("Unaccounted row: " + row);
+                case RESOLVED               -> resolved++;
+                case NON_GEOGRAPHIC         -> nonGeographic++;
+                case THIRD_PARTY_CONTRACTOR -> thirdPartyContractor++;
+                case NEEDS_CONFIRMATION     -> needsConfirmation++;
+                case AMBIGUOUS_HPCODE       -> ambiguous++;
+                case UNKNOWN_HPCODE         -> throw new AssertionError("Unaccounted row: " + row);
             }
         }
         assertEquals(50, resolved,          "cleanly-resolved rows (34 via PROVINCE_BY_HPCODE + 14 via "
@@ -257,11 +278,14 @@ class HpCodeProvinceMappingTest {
                                                  + "2 via PROVINCE_BY_OPMCCODE's HROP/HKOP, resolved "
                                                  + "2026-08-26)");
         assertEquals(11, nonGeographic,     "non-geographic excluded rows");
-        assertEquals(1,  needsConfirmation, "flagged-for-confirmation rows (SIERRA only — HROP/HKOP "
-                                                 + "resolved 2026-08-26)");
+        assertEquals(1,  thirdPartyContractor, "third-party contractor rows (SIERRA, reclassified "
+                                                 + "2026-08-26 — confirmed by SLT, not a geographic OPMC "
+                                                 + "at all)");
+        assertEquals(0,  needsConfirmation, "flagged-for-confirmation rows — none remain: HROP/HKOP "
+                                                 + "resolved and SIERRA reclassified, both 2026-08-26");
         assertEquals(0,  ambiguous,         "every real row under HPN/E and HPNW/NCP is now named in "
                                                  + "PROVINCE_BY_OPMCCODE — the ambiguous bucket is a "
                                                  + "safety net for future data, not any current row");
-        assertEquals(62, resolved + nonGeographic + needsConfirmation + ambiguous);
+        assertEquals(62, resolved + nonGeographic + thirdPartyContractor + needsConfirmation + ambiguous);
     }
 }
