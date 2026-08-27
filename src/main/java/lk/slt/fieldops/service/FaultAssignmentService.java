@@ -7,6 +7,7 @@ import lk.slt.fieldops.repository.FaultNoteRepository;
 import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.repository.WorkGroupRepository;
+import lk.slt.fieldops.shared.OpmcAccessGuard;
 import lk.slt.fieldops.websocket
         .WebSocketEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
@@ -39,6 +40,8 @@ public class FaultAssignmentService {
             webSocketEventPublisher;
     private final WorkGroupRepository
             workGroupRepository;
+    private final OpmcAccessGuard
+            opmcGuard;
 
     private static final DateTimeFormatter
             FMT = DateTimeFormatter
@@ -65,6 +68,12 @@ public class FaultAssignmentService {
                         new RuntimeException(
                                 "Fault not found: "
                                         + faultId));
+
+        // Caller-OPMC scoping (Critical, reclassified from Major — QA_Compliance_Consolidated_Report.md):
+        // the calling Admin's own OPMC must match the fault's OPMC; SUPER_ADMIN is unscoped. Distinct
+        // from the WorkGroup-vs-fault structural check below, which only verifies the fault and its
+        // target Work Group are internally consistent and says nothing about who may call this at all.
+        opmcGuard.assertSameOpmc(fault.getOpmcId(), adminId);
 
         WorkGroup workGroup = workGroupRepository
                 .findById(req.getWorkGroupId())
@@ -243,6 +252,9 @@ public class FaultAssignmentService {
                         new RuntimeException(
                                 "Fault not found: "
                                         + faultId));
+
+        // Caller-OPMC scoping (Critical, reclassified from Major) — same reasoning as assignFault.
+        opmcGuard.assertSameOpmc(fault.getOpmcId(), adminId);
 
         WorkGroup newWorkGroup = workGroupRepository
                 .findById(req.getNewWorkGroupId())
@@ -525,6 +537,19 @@ public class FaultAssignmentService {
                                 new RuntimeException(
                                         "Fault not found: "
                                                 + faultId));
+
+                // Caller-OPMC scoping (Critical, reclassified from Major) — checked per-fault
+                // since a bulk request's faults are not guaranteed to share one OPMC; a rejection
+                // here fails just this fault, matching how the WorkGroup-consistency check below
+                // already fails individual faults without aborting the whole batch.
+                try {
+                    opmcGuard.assertSameOpmc(fault.getOpmcId(), adminId);
+                } catch (AccessDeniedException ade) {
+                    failedIds.add(faultId);
+                    errors.add("Fault #" + faultId
+                            + " does not belong to your OPMC");
+                    continue;
+                }
 
                 if (fault.getStatus() != null
                         && ("COMPLETED".equals(

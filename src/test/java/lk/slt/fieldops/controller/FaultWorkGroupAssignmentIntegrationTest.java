@@ -38,16 +38,20 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * those UI tabs call, real JWT filter chain, real MySQL, same standard as everything else in this
  * session).
  *
- * <p><b>Cross-OPMC boundary — investigated before writing, not assumed.</b> Read
- * {@code FaultAssignmentService.assignFault}/{@code reassignFault}/{@code bulkAssign} in full: the
- * only OPMC check present anywhere in any of the three is that the *target Work Group's* OPMC must
- * equal the *fault's own* OPMC ({@code workGroup.getOpmc().getId().equals(fault.getOpmcId())}) — a
- * structural consistency check between the fault and the Work Group it's being pointed at. Neither
- * these three service methods nor {@code FaultController}'s {@code @PreAuthorize} annotations
- * ({@code hasAnyRole('ADMIN','SUPER_ADMIN')}, no narrower) check the *caller's own* OPMC against
- * the fault's OPMC anywhere. {@link #crossOpmcAssign_adminFromDifferentOpmc_liveBehaviorDocumented}
- * verifies this live rather than trusting the static read, and documents exactly what happens —
- * see that test's own docstring for the result and what it means.
+ * <p><b>Cross-OPMC boundary — investigated before writing, fixed once confirmed real.</b> A first
+ * pass through {@code FaultAssignmentService.assignFault}/{@code reassignFault}/{@code bulkAssign}
+ * found only one OPMC check anywhere in any of the three: the *target Work Group's* OPMC must equal
+ * the *fault's own* OPMC ({@code workGroup.getOpmc().getId().equals(fault.getOpmcId())}) — a
+ * structural consistency check between the fault and the Work Group it's being pointed at, with
+ * nothing checking the *caller's own* OPMC. {@link #crossOpmcAssign_adminFromDifferentOpmc_rejected}
+ * confirmed this live (200, and the cross-OPMC assignment persisted) before it was fixed — logged as
+ * Critical in QA_Compliance_Consolidated_Report.md (same shape as Critical #30: real, live,
+ * unauthorized cross-tenant write access) and closed by adding
+ * {@code OpmcAccessGuard.assertSameOpmc(fault.getOpmcId(), adminId)} to all three methods, alongside
+ * (not instead of) the existing WorkGroup-vs-fault structural check. That test and
+ * {@link #assignFault_bySuperAdminFromDifferentOpmc_stillSucceeds} now verify the fixed behavior
+ * live: a non-SUPER_ADMIN caller from a different OPMC is rejected (403), while SUPER_ADMIN remains
+ * fully unscoped.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -357,28 +361,14 @@ class FaultWorkGroupAssignmentIntegrationTest {
 
     /**
      * An ADMIN whose own {@code opmcId} is OPMC B assigns a fault that belongs to a DIFFERENT
-     * OPMC A, to a Work Group that itself belongs to OPMC A (satisfying the one OPMC check
-     * {@code assignFault} does perform — Work-Group-to-fault consistency). If a caller-scoping
-     * boundary like the one this session built for Exchange/Cab/Dp/Circuit
-     * ({@code OpmcAccessGuard.resolveOpmcFilter}) or WorkGroup/Opmc's own
-     * {@code assertSameOpmcUnlessSuperAdmin} existed here too, this must be rejected (403/other
-     * non-200) regardless of the Work-Group-to-fault check passing.
-     *
-     * <p><b>Live result, confirmed by running this test: the request SUCCEEDS (200), and the
-     * cross-OPMC assignment persists.</b> Static reading already showed neither
-     * {@code FaultController}'s {@code @PreAuthorize} annotations
-     * (role-only: {@code hasAnyRole('ADMIN','SUPER_ADMIN')}) nor
-     * {@code FaultAssignmentService.assignFault}/{@code reassignFault}/{@code bulkAssign} check the
-     * caller's own OPMC against the fault's OPMC anywhere — only that the target Work Group's OPMC
-     * matches the fault's OPMC. This test turns that static reading into a live-confirmed fact:
-     * an OPMC-scoped ADMIN can assign, reassign, or bulk-assign ANY fault in the system, as long as
-     * they pick a Work Group belonging to THAT fault's own OPMC — their own OPMC membership is
-     * never checked. This is a real, live-confirmed gap, not fixed here per explicit instruction
-     * (this task is test-writing only, no new feature code) — see
-     * QA_Compliance_Consolidated_Report.md for where this is logged as a finding.
+     * OPMC A, to a Work Group that itself belongs to OPMC A (satisfying the WorkGroup-to-fault
+     * structural check {@code assignFault} already performed). Before the fix, this succeeded (200)
+     * and persisted — confirmed live, not assumed — because nothing checked the caller's own OPMC.
+     * {@code OpmcAccessGuard.assertSameOpmc(fault.getOpmcId(), adminId)} now closes this: the request
+     * must be rejected (403) and the fault must remain unassigned.
      */
     @Test
-    void crossOpmcAssign_adminFromDifferentOpmc_liveBehaviorDocumented() throws Exception {
+    void crossOpmcAssign_adminFromDifferentOpmc_rejected() throws Exception {
         Opmc faultOpmc = newOpmc();
         Opmc adminOpmc = newOpmc();
         assertNotEquals(faultOpmc.getId(), adminOpmc.getId(), "The two OPMCs must genuinely differ");
@@ -394,18 +384,43 @@ class FaultWorkGroupAssignmentIntegrationTest {
                 .content(body))
             .andReturn();
 
-        // Documents live behavior as found, not a guess: no caller-OPMC boundary currently exists
-        // for fault assignment. If this test ever starts failing (a non-200 here), that means the
-        // boundary has since been added -- update this test's expectation and its docstring rather
-        // than treating the failure as a regression.
+        assertEquals(403, res.getResponse().getStatus(),
+            "An ADMIN from a different OPMC than the fault's own must be rejected, even though the "
+                + "target Work Group belongs to the fault's OPMC. Body: " + res.getResponse().getContentAsString());
+
+        flushAndClear();
+        assertNull(faultRepo.findById(faultId).orElseThrow().getWorkGroupId(),
+            "The rejected cross-OPMC assignment must not persist");
+    }
+
+    /**
+     * SUPER_ADMIN must remain fully unscoped by the new caller-OPMC check — the same cross-OPMC
+     * shape as {@link #crossOpmcAssign_adminFromDifferentOpmc_rejected}, but the caller is
+     * SUPER_ADMIN instead of ADMIN, and must still succeed.
+     */
+    @Test
+    void assignFault_bySuperAdminFromDifferentOpmc_stillSucceeds() throws Exception {
+        Opmc faultOpmc = newOpmc();
+        Opmc superAdminOpmc = newOpmc();
+        assertNotEquals(faultOpmc.getId(), superAdminOpmc.getId(), "The two OPMCs must genuinely differ");
+
+        WorkGroup wgInFaultOpmc = newWorkGroup(faultOpmc, true);
+        User superAdmin = newUser(User.Role.SUPER_ADMIN, superAdminOpmc.getId());
+        Long faultId = reportFaultAs(faultOpmc.getId());
+
+        String body = "{\"workGroupId\":" + wgInFaultOpmc.getId() + ",\"notifyTeamLead\":false,\"notifyCustomer\":false}";
+        MvcResult res = mvc.perform(post("/api/faults/{id}/assign", faultId)
+                .header("Authorization", bearer(superAdmin.getId(), "SUPER_ADMIN", superAdminOpmc.getId()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andReturn();
+
+        String resBody = res.getResponse().getContentAsString();
         assertEquals(200, res.getResponse().getStatus(),
-            "Documents current live behavior: an ADMIN from a different OPMC than the fault's own "
-                + "is NOT blocked from assigning it, as long as the target Work Group belongs to "
-                + "the fault's OPMC. Body: " + res.getResponse().getContentAsString());
+            "SUPER_ADMIN must remain unscoped by the caller-OPMC check. Body: " + resBody);
 
         flushAndClear();
         assertEquals(wgInFaultOpmc.getId(), faultRepo.findById(faultId).orElseThrow().getWorkGroupId(),
-            "The cross-OPMC assignment genuinely persists, confirming this isn't just a lenient "
-                + "response with no real effect");
+            "SUPER_ADMIN's cross-OPMC assignment must persist normally");
     }
 }

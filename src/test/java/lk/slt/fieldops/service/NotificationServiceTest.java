@@ -454,7 +454,8 @@ class NotificationServiceTest {
     void faultAssigned_triggersFcmToTeamLead() {
         // ── Arrange: a REPORTED fault, the Work Group + Team Lead it is given to, and the admin ──
         FaultAssignmentService assignmentService = new FaultAssignmentService(
-            faultRepo, userRepo, historyRepo, noteRepo, webSocketEventPublisher, workGroupRepository);
+            faultRepo, userRepo, historyRepo, noteRepo, webSocketEventPublisher, workGroupRepository,
+            new lk.slt.fieldops.shared.OpmcAccessGuard(userRepo));
 
         Fault fault = reportedFault();
         when(faultRepo.findById(FAULT_ID)).thenReturn(Optional.of(fault));
@@ -481,6 +482,7 @@ class NotificationServiceTest {
         admin.setId(NA_ADMIN_ID);
         admin.setFullName("Admin Amelia");
         admin.setRole(User.Role.ADMIN);
+        admin.setOpmcId(1L);
         when(userRepo.findById(NA_ADMIN_ID)).thenReturn(Optional.of(admin));
 
         when(notificationRepo.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
