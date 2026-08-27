@@ -36,8 +36,43 @@ public class Fault {
     @Column(name = "fault_number", nullable = false, unique = true, length = 30)
     private String faultNumber;
 
-    @Column(name = "branch_id", nullable = false)
-    private Long branchId;
+    @Column(name = "opmc_id", nullable = false)
+    private Long opmcId;
+
+    // Stage D (SRS 5.5.1): the Work Group a fault is currently routed to. Admin
+    // assigns to a Work Group, not a specific person — the Work Group's Team Lead
+    // then self-assigns or dispatches to a Technician. Null means unassigned
+    // (in the Admin queue), including after a transfer-to-Admin.
+    @Column(name = "work_group_id")
+    private Long workGroupId;
+
+    @Column(name = "work_group_name", length = 150)
+    private String workGroupName;
+
+    // Stage C: the specific Exchange+CAB+DP attach point this fault is against.
+    // Nullable — existing faults predate this concept and won't have one.
+    @Column(name = "circuit_id")
+    private Long circuitId;
+
+    // H1c: set together with circuitId by FaultService.attachCircuit — denormalized display
+    // string, same pattern as workGroupId/workGroupName above, so FaultDTO can show what's
+    // attached without a join/lookup on every fault read.
+    @Column(name = "circuit_code", length = 30)
+    private String circuitCode;
+
+    // H1b: auto-derived at creation, only when circuitId is absent and GPS is present —
+    // the nearest Exchange among those with geocoded coordinates (see
+    // fieldops/scripts/geocode_master_data.py; not every Exchange has coordinates yet).
+    // nearestExchangeDistanceKm is the actual computed distance, kept alongside the id rather
+    // than a separate persisted "low confidence" boolean, so the confidence threshold can be
+    // changed later (or tightened per-caller) without a schema migration or stale flag —
+    // low-confidence is derived from this distance at read time (see FaultDTO.getNearestExchangeLowConfidence
+    // and GeoUtils.NEAREST_EXCHANGE_LOW_CONFIDENCE_KM).
+    @Column(name = "nearest_exchange_id")
+    private Long nearestExchangeId;
+
+    @Column(name = "nearest_exchange_distance_km")
+    private Double nearestExchangeDistanceKm;
 
     @Column(name = "customer_id", nullable = false)
     private Long customerId;
@@ -72,6 +107,10 @@ public class Fault {
 
     @Column(name = "longitude")
     private Double longitude;
+
+    // Comma-separated before-service evidence photo URLs (max 5, JPEG/PNG).
+    @Column(name = "photo_urls", columnDefinition = "TEXT")
+    private String photoUrls;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
@@ -110,6 +149,18 @@ public class Fault {
 
     @Column(name = "cause_of_fault", length = 500)
     private String causeOfFault;
+
+    // Cause/Material hierarchy import (2026-08-21): additive nullable FK into the new
+    // cause_of_fault reference table, same pattern as circuitId/nearestExchangeId above —
+    // sits alongside the existing free-text causeOfFault field above, does not replace it.
+    @Column(name = "cause_id")
+    private Long causeId;
+
+    // Stage 2 (QA_Compliance_Consolidated_Report.md) — denormalized display value, same pattern
+    // as circuitCode alongside circuitId (H1c). Written by FaultService.attachCause; avoids a
+    // join against cause_of_fault on every fault list/detail read.
+    @Column(name = "cause_code", length = 10)
+    private String causeCode;
 
     @Column(name = "completion_remarks", columnDefinition = "TEXT")
     private String completionRemarks;
@@ -159,7 +210,13 @@ public class Fault {
     // ── Getters ───────────────────────────────────────────────────────────────
     public Long          getId()                   { return id; }
     public String        getFaultNumber()          { return faultNumber; }
-    public Long          getBranchId()             { return branchId; }
+    public Long          getOpmcId()               { return opmcId; }
+    public Long          getWorkGroupId()          { return workGroupId; }
+    public String        getWorkGroupName()        { return workGroupName; }
+    public Long          getCircuitId()            { return circuitId; }
+    public String        getCircuitCode()          { return circuitCode; }
+    public Long          getNearestExchangeId()          { return nearestExchangeId; }
+    public Double         getNearestExchangeDistanceKm() { return nearestExchangeDistanceKm; }
     public Long          getCustomerId()           { return customerId; }
     public String        getCustomerName()         { return customerName; }
     public String        getCustomerPhone()        { return customerPhone; }
@@ -171,6 +228,7 @@ public class Fault {
     public String        getLocationDistrict()     { return locationDistrict; }
     public Double        getLatitude()             { return latitude; }
     public Double        getLongitude()            { return longitude; }
+    public String        getPhotoUrls()            { return photoUrls; }
     public FaultPriority getPriority()             { return priority; }
     public FaultStatus   getStatus()               { return status; }
     public Long          getAssignedTeamLeadId()   { return assignedTeamLeadId; }
@@ -183,6 +241,8 @@ public class Fault {
     public String        getEscalationReason()     { return escalationReason; }
     public String        getHoldReason()           { return holdReason; }
     public String        getCauseOfFault()         { return causeOfFault; }
+    public Long          getCauseId()              { return causeId; }
+    public String        getCauseCode()            { return causeCode; }
     public String        getCompletionRemarks()    { return completionRemarks; }
     public LocalDateTime getStartedAt()            { return startedAt; }
     public LocalDateTime getCompletedAt()          { return completedAt; }
@@ -197,7 +257,13 @@ public class Fault {
     // ── Setters ───────────────────────────────────────────────────────────────
     public void setId(Long v)                       { this.id                   = v; }
     public void setFaultNumber(String v)            { this.faultNumber          = v; }
-    public void setBranchId(Long v)                 { this.branchId             = v; }
+    public void setOpmcId(Long v)                   { this.opmcId               = v; }
+    public void setWorkGroupId(Long v)              { this.workGroupId          = v; }
+    public void setWorkGroupName(String v)          { this.workGroupName        = v; }
+    public void setCircuitId(Long v)                { this.circuitId            = v; }
+    public void setCircuitCode(String v)            { this.circuitCode          = v; }
+    public void setNearestExchangeId(Long v)              { this.nearestExchangeId          = v; }
+    public void setNearestExchangeDistanceKm(Double v)    { this.nearestExchangeDistanceKm  = v; }
     public void setCustomerId(Long v)               { this.customerId           = v; }
     public void setCustomerName(String v)           { this.customerName         = v; }
     public void setCustomerPhone(String v)          { this.customerPhone        = v; }
@@ -209,6 +275,7 @@ public class Fault {
     public void setLocationDistrict(String v)       { this.locationDistrict     = v; }
     public void setLatitude(Double v)               { this.latitude             = v; }
     public void setLongitude(Double v)              { this.longitude            = v; }
+    public void setPhotoUrls(String v)              { this.photoUrls            = v; }
     public void setPriority(FaultPriority v)        { this.priority             = v; }
     public void setStatus(FaultStatus v)            { this.status               = v; }
     public void setAssignedTeamLeadId(Long v)       { this.assignedTeamLeadId   = v; }
@@ -221,6 +288,8 @@ public class Fault {
     public void setEscalationReason(String v)       { this.escalationReason     = v; }
     public void setHoldReason(String v)             { this.holdReason           = v; }
     public void setCauseOfFault(String v)           { this.causeOfFault         = v; }
+    public void setCauseId(Long v)                  { this.causeId              = v; }
+    public void setCauseCode(String v)              { this.causeCode            = v; }
     public void setCompletionRemarks(String v)      { this.completionRemarks    = v; }
     public void setStartedAt(LocalDateTime v)       { this.startedAt            = v; }
     public void setCompletedAt(LocalDateTime v)     { this.completedAt          = v; }

@@ -4,11 +4,13 @@ import jakarta.validation.Valid;
 import lk.slt.fieldops.dto.FaultAssignmentDTO;
 import lk.slt.fieldops.dto.FaultDTO;
 import lk.slt.fieldops.dto.ReportFaultRequest;
+import lk.slt.fieldops.dto.LocationResponseDTO;
 import lk.slt.fieldops.entity.FaultHistory;
 import lk.slt.fieldops.entity.User;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.service.FaultAssignmentService;
 import lk.slt.fieldops.service.FaultService;
+import lk.slt.fieldops.service.LocationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -30,12 +32,33 @@ public class FaultController {
     private final FaultAssignmentService faultAssignmentService;
     private final FaultService           faultService;
     private final UserRepository         userRepo;
+    private final LocationService        locationService;
 
-    // ─── GET /api/faults — Admin/SuperAdmin: all faults ──────────────────────
+    // ─── GET /api/faults — Admin/SuperAdmin: all faults, optionally filtered ──
+    // status and category are both optional. Absent → no narrowing on that field,
+    // one alone → narrows on that one, both → AND-ed. Filtering is done by the
+    // database query (FaultRepository.findByOptionalStatusAndCategory).
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<FaultDTO>> getAll() {
-        return ResponseEntity.ok(faultService.getAllFaults());
+    public ResponseEntity<List<FaultDTO>> getAll(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String category,
+            @AuthenticationPrincipal Long userId) {
+        log.info("GET /api/faults status={} category={}", status, category);
+        boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
+            .getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+        if (isSuperAdmin) {
+            return ResponseEntity.ok(faultService.getAllFaults(status, category));
+        }
+        // RES-023 — OPMC Admin sees only their own OPMC's faults. opmcId is
+        // derived from the caller's own user record, never a client-supplied
+        // parameter, so it can't be overridden the way a bare query param could.
+        Long opmcId = userRepo.findById(userId).map(User::getOpmcId).orElse(null);
+        if (opmcId == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        return ResponseEntity.ok(faultService.getAllFaultsForOpmc(opmcId, status, category));
     }
 
     // ─── GET /api/faults/my — Team Lead: faults assigned to me ───────────────
@@ -45,6 +68,15 @@ public class FaultController {
             @AuthenticationPrincipal Long userId) {
         log.info("GET /api/faults/my teamLeadId={}", userId);
         return ResponseEntity.ok(faultService.getFaultsByTeamLead(userId));
+    }
+
+    // ─── GET /api/faults/my-workgroup — Team Lead: my Work Group's incoming queue (SRS 5.5.1) ──
+    @GetMapping("/my-workgroup")
+    @PreAuthorize("hasRole('TEAM_LEAD')")
+    public ResponseEntity<List<FaultDTO>> getMyWorkGroupQueue(
+            @AuthenticationPrincipal Long userId) {
+        log.info("GET /api/faults/my-workgroup teamLeadId={}", userId);
+        return ResponseEntity.ok(faultService.getFaultsForTeamLeadWorkGroup(userId));
     }
 
     // ─── GET /api/faults/my-reports — CLIENT: faults I reported ─────────────
@@ -112,14 +144,65 @@ public class FaultController {
             lk.slt.fieldops.entity.FaultHistory.ChangedByRole.ADMIN));
     }
 
-    // ─── POST /api/faults/{id}/assign — Admin assigns fault to Team Lead ──────
+    // ─── PATCH /api/faults/{id}/circuit — manually attach a Circuit (H1c, Admin/Team Lead) ──
+    @PatchMapping("/{id}/circuit")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','TEAM_LEAD')")
+    public ResponseEntity<FaultDTO> attachCircuit(
+            @PathVariable Long id,
+            @jakarta.validation.Valid @RequestBody lk.slt.fieldops.dto.AttachCircuitRequest req,
+            @AuthenticationPrincipal Long userId) {
+        User user = userRepo.findById(userId).orElse(null);
+        boolean isTeamLead = SecurityContextHolder.getContext().getAuthentication()
+            .getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_TEAM_LEAD"));
+        lk.slt.fieldops.entity.FaultHistory.ChangedByRole role = isTeamLead
+            ? lk.slt.fieldops.entity.FaultHistory.ChangedByRole.TEAM_LEAD
+            : lk.slt.fieldops.entity.FaultHistory.ChangedByRole.ADMIN;
+        String actorName = user != null ? user.getFullName() : ("Staff #" + userId);
+        return ResponseEntity.ok(faultService.attachCircuit(id, req.getCircuitId(), userId, actorName, role));
+    }
+
+    // ─── PATCH /api/faults/{id}/cause — Admin/Team-Lead post-hoc structured cause classification
+    //     (Stage 2, QA_Compliance_Consolidated_Report.md) — mirrors attachCircuit exactly ──
+    @PatchMapping("/{id}/cause")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','TEAM_LEAD')")
+    public ResponseEntity<FaultDTO> attachCause(
+            @PathVariable Long id,
+            @jakarta.validation.Valid @RequestBody lk.slt.fieldops.dto.AttachCauseRequest req,
+            @AuthenticationPrincipal Long userId) {
+        User user = userRepo.findById(userId).orElse(null);
+        boolean isTeamLead = SecurityContextHolder.getContext().getAuthentication()
+            .getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_TEAM_LEAD"));
+        lk.slt.fieldops.entity.FaultHistory.ChangedByRole role = isTeamLead
+            ? lk.slt.fieldops.entity.FaultHistory.ChangedByRole.TEAM_LEAD
+            : lk.slt.fieldops.entity.FaultHistory.ChangedByRole.ADMIN;
+        String actorName = user != null ? user.getFullName() : ("Staff #" + userId);
+        return ResponseEntity.ok(faultService.attachCause(id, req.getCauseId(), userId, actorName, role));
+    }
+
+    // ─── GET /api/faults/{id}/available-technicians — proximity + availability for the Technician Selector ──
+    @GetMapping("/{id}/available-technicians")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<LocationResponseDTO.NearbyTechnicianDTO>> getAvailableTechnicians(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "15.0") double radiusKm) {
+        FaultDTO fault = faultService.getFaultById(id);
+        if (fault.getLatitude() == null || fault.getLongitude() == null) {
+            return ResponseEntity.ok(List.of());
+        }
+        return ResponseEntity.ok(
+            locationService.getNearbyTechnicians(fault.getLatitude(), fault.getLongitude(), radiusKm));
+    }
+
+    // ─── POST /api/faults/{id}/assign — Admin assigns fault to a Work Group ───
     @PostMapping("/{id}/assign")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<FaultAssignmentDTO.AssignmentResponse> assignFault(
             @PathVariable Long id,
             @Valid @RequestBody FaultAssignmentDTO.AssignRequest req,
             @AuthenticationPrincipal Long userId) {
-        log.info("POST /api/faults/{}/assign teamLeadId={}", id, req.getTechnicianId());
+        log.info("POST /api/faults/{}/assign workGroupId={}", id, req.getWorkGroupId());
         return ResponseEntity.ok(faultAssignmentService.assignFault(id, req, userId));
     }
 
@@ -130,8 +213,30 @@ public class FaultController {
             @PathVariable Long id,
             @Valid @RequestBody FaultAssignmentDTO.ReassignRequest req,
             @AuthenticationPrincipal Long userId) {
-        log.info("POST /api/faults/{}/reassign newTeamLeadId={}", id, req.getNewTechnicianId());
+        log.info("POST /api/faults/{}/reassign newWorkGroupId={}", id, req.getNewWorkGroupId());
         return ResponseEntity.ok(faultAssignmentService.reassignFault(id, req, userId));
+    }
+
+    // ─── POST /api/faults/{id}/self-assign — Team Lead "Assign to Me" (SRS 5.5.1) ──
+    @PostMapping("/{id}/self-assign")
+    @PreAuthorize("hasRole('TEAM_LEAD')")
+    public ResponseEntity<FaultAssignmentDTO.AssignmentResponse> selfAssignFault(
+            @PathVariable Long id,
+            @RequestBody(required = false) FaultAssignmentDTO.SelfAssignRequest req,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/faults/{}/self-assign teamLeadId={}", id, userId);
+        return ResponseEntity.ok(faultAssignmentService.selfAssignFault(id, req, userId));
+    }
+
+    // ─── POST /api/faults/{id}/transfer-to-admin — Team Lead cannot resolve (SRS 5.5.1) ──
+    @PostMapping("/{id}/transfer-to-admin")
+    @PreAuthorize("hasRole('TEAM_LEAD')")
+    public ResponseEntity<FaultAssignmentDTO.AssignmentResponse> transferToAdmin(
+            @PathVariable Long id,
+            @Valid @RequestBody FaultAssignmentDTO.TransferToAdminRequest req,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/faults/{}/transfer-to-admin teamLeadId={}", id, userId);
+        return ResponseEntity.ok(faultAssignmentService.transferToAdmin(id, req, userId));
     }
 
     // ─── POST /api/faults/{id}/escalate ──────────────────────────────────────
@@ -151,8 +256,8 @@ public class FaultController {
     public ResponseEntity<FaultAssignmentDTO.BulkAssignResponse> bulkAssign(
             @Valid @RequestBody FaultAssignmentDTO.BulkAssignRequest req,
             @AuthenticationPrincipal Long userId) {
-        log.info("POST /api/faults/bulk-assign faultCount={}, teamLeadId={}",
-                req.getFaultIds().size(), req.getTechnicianId());
+        log.info("POST /api/faults/bulk-assign faultCount={}, workGroupId={}",
+                req.getFaultIds().size(), req.getWorkGroupId());
         return ResponseEntity.ok(faultAssignmentService.bulkAssign(req, userId));
     }
 

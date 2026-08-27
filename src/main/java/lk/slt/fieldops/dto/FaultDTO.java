@@ -10,7 +10,9 @@ public class FaultDTO {
 
     private Long   id;
     private String faultNumber;
-    private Long   branchId;
+    private Long   opmcId;
+    private Long   workGroupId;
+    private String workGroupName;
     private Long   customerId;
     private String customerName;
     private String customerPhone;
@@ -22,6 +24,13 @@ public class FaultDTO {
     private String locationDistrict;
     private Double latitude;
     private Double longitude;
+    private Long   nearestExchangeId;
+    private Double nearestExchangeDistanceKm;
+    private Long   circuitId;
+    private String circuitCode;
+    private Long   causeId;
+    private String causeCode;
+    private String photoUrls;
     private String priority;
     private String status;
     private Long   assignedTeamLeadId;
@@ -70,6 +79,19 @@ public class FaultDTO {
         return new AssignedTo(assignedTeamLeadId, assignedTeamLeadName);
     }
 
+    /**
+     * H1b: true when nearestExchangeDistanceKm exceeds the confidence threshold — a real signal
+     * that the true nearest Exchange is likely one of the not-yet-geocoded ones, not that this
+     * fault is genuinely far from any exchange. Derived at read time from
+     * {@link lk.slt.fieldops.shared.GeoUtils#NEAREST_EXCHANGE_LOW_CONFIDENCE_KM} rather than a
+     * separate persisted flag, so tightening/loosening the threshold later needs no migration and
+     * can never leave a stale flag behind. Null (not false) when there's no match to judge.
+     */
+    public Boolean getNearestExchangeLowConfidence() {
+        if (nearestExchangeId == null || nearestExchangeDistanceKm == null) return null;
+        return nearestExchangeDistanceKm > lk.slt.fieldops.shared.GeoUtils.NEAREST_EXCHANGE_LOW_CONFIDENCE_KM;
+    }
+
     public static class ReportedBy {
         private final String fullName;
         private final String phone;
@@ -89,7 +111,9 @@ public class FaultDTO {
     // Getters
     public Long   getId()                   { return id; }
     public String getFaultNumber()          { return faultNumber; }
-    public Long   getBranchId()             { return branchId; }
+    public Long   getOpmcId()               { return opmcId; }
+    public Long   getWorkGroupId()          { return workGroupId; }
+    public String getWorkGroupName()        { return workGroupName; }
     public Long   getCustomerId()           { return customerId; }
     public String getCustomerName()         { return customerName; }
     public String getCustomerPhone()        { return customerPhone; }
@@ -101,6 +125,13 @@ public class FaultDTO {
     public String getLocationDistrict()     { return locationDistrict; }
     public Double getLatitude()             { return latitude; }
     public Double getLongitude()            { return longitude; }
+    public Long   getNearestExchangeId()          { return nearestExchangeId; }
+    public Double getNearestExchangeDistanceKm()  { return nearestExchangeDistanceKm; }
+    public Long   getCircuitId()                  { return circuitId; }
+    public String getCircuitCode()                { return circuitCode; }
+    public Long   getCauseId()                    { return causeId; }
+    public String getCauseCode()                  { return causeCode; }
+    public String getPhotoUrls()            { return photoUrls; }
     public String getPriority()             { return priority; }
     public String getStatus()               { return status; }
     public Long   getAssignedTeamLeadId()   { return assignedTeamLeadId; }
@@ -123,7 +154,9 @@ public class FaultDTO {
     // Setters
     public void setId(Long v)                       { this.id                   = v; }
     public void setFaultNumber(String v)            { this.faultNumber          = v; }
-    public void setBranchId(Long v)                 { this.branchId             = v; }
+    public void setOpmcId(Long v)                   { this.opmcId               = v; }
+    public void setWorkGroupId(Long v)              { this.workGroupId          = v; }
+    public void setWorkGroupName(String v)          { this.workGroupName        = v; }
     public void setCustomerId(Long v)               { this.customerId           = v; }
     public void setCustomerName(String v)           { this.customerName         = v; }
     public void setCustomerPhone(String v)          { this.customerPhone        = v; }
@@ -135,6 +168,13 @@ public class FaultDTO {
     public void setLocationDistrict(String v)       { this.locationDistrict     = v; }
     public void setLatitude(Double v)               { this.latitude             = v; }
     public void setLongitude(Double v)              { this.longitude            = v; }
+    public void setNearestExchangeId(Long v)             { this.nearestExchangeId         = v; }
+    public void setNearestExchangeDistanceKm(Double v)   { this.nearestExchangeDistanceKm = v; }
+    public void setCircuitId(Long v)                     { this.circuitId                 = v; }
+    public void setCircuitCode(String v)                 { this.circuitCode               = v; }
+    public void setCauseId(Long v)                       { this.causeId                   = v; }
+    public void setCauseCode(String v)                   { this.causeCode                 = v; }
+    public void setPhotoUrls(String v)              { this.photoUrls            = v; }
     public void setPriority(String v)               { this.priority             = v; }
     public void setStatus(String v)                 { this.status               = v; }
     public void setAssignedTeamLeadId(Long v)       { this.assignedTeamLeadId   = v; }
