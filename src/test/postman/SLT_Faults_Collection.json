@@ -1,0 +1,107 @@
+{
+  "info": {
+    "name": "SLT_Faults_Collection",
+    "description": "FAULT-016 — GET /api/faults filtered by status and category must return only matching items. Run with: newman run SLT_Faults_Collection.json --env-var baseUrl=http://localhost:8080 --env-var adminToken=<JWT> (requires a running fieldops instance and an ADMIN token). The executable twin that runs without a live server or newman is fieldops/src/test/java/lk/slt/fieldops/controller/SltFaultsCollectionTest.java::filterByCategoryAndStatus.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Filter_By_Category_And_Status",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "// GET /api/faults returns a bare JSON array of FaultDTO, not a paged {content:[...]} envelope.",
+              "pm.test('response is a JSON array', function () {",
+              "    pm.expect(pm.response.json()).to.be.an('array');",
+              "});",
+              "",
+              "pm.test('All OPEN+INTERNET', function () {",
+              "    pm.response.json().forEach(function (f) {",
+              "        pm.expect(f.statusDisplay).to.eql('OPEN');",
+              "        pm.expect(f.category).to.eql('INTERNET');",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/faults?status=OPEN&category=INTERNET",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "faults"],
+          "query": [
+            { "key": "status", "value": "OPEN" },
+            { "key": "category", "value": "INTERNET" }
+          ]
+        },
+        "description": "The sheet writes the category as BROADBAND; the backend enum is INTERNET (FaultController.normalizeMobileCategory maps the mobile alias on write, but responses carry the enum). Note FaultController.getAll() declares no status/category request parameters at all, so these are currently ignored by the server."
+      },
+      "response": []
+    },
+    {
+      "name": "Filter_By_Status_Completed",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('All COMPLETED', function () {",
+              "    pm.response.json().forEach(function (f) {",
+              "        pm.expect(f.status).to.eql('COMPLETED');",
+              "    });",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{adminToken}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/faults?status=COMPLETED",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "faults"],
+          "query": [
+            { "key": "status", "value": "COMPLETED" }
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

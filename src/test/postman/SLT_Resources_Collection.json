@@ -1,0 +1,89 @@
+{
+  "info": {
+    "_postman_id": "3d9c7a15-2b64-4c8f-9a11-5f2d6c0e7b93",
+    "name": "SLT_Resources_Collection",
+    "description": "RES-009 (05_RESOURCE_MGMT, FR-15) — material request submit-then-approve via Newman.\n\nRun:\n  newman run fieldops/src/test/postman/SLT_Resources_Collection.json \\\n    --env-var baseUrl=http://localhost:8080 \\\n    --env-var techToken=<technician JWT> \\\n    --env-var adminToken=<admin JWT> \\\n    --env-var materialId=<an active material with stock>\n\nNOTE ON THE ENDPOINT AND STATUS CODE: the sheet writes POST /api/material-requests and\nPOST /api/material-requests/{{reqId}}/approve, and expects 201 on submit. The implemented routes\nare POST /api/inventory/material-request (singular) and\nPOST /api/inventory/material-requests/{{reqId}}/approve (InventoryController), and the submit\nreturns 200 OK, not 201 Created — unlike this codebase's other create endpoints. The submit body is\nalso multi-item ({items:[{materialId, quantity}], taskId, faultId, urgency, notes}), so there is no\ntop-level materialId/quantity. This collection drives the real routes and asserts 2xx on submit\nrather than a literal 201.\n\nApproval requires notifyRequester:true for the requester to be told; the Admin portal\n(InventoryPage.js) sends it, so the collection does too.\n\nnewman is not installed in this environment and nothing listens on :8080, so this collection cannot\nproduce a verdict here. Its executable twin is\nfieldops/src/test/java/lk/slt/fieldops/controller/SltResourcesCollectionTest.java, which asserts\nexactly the same things through MockMvc against the real database.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "MaterialRequest_Submit_And_Approve",
+      "item": [
+        {
+          "name": "1. POST -> submit material request (PENDING)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('2xx PENDING', function () {",
+                  "    pm.expect(pm.response.code).to.be.within(200, 299);",
+                  "    pm.expect(pm.response.json().status).to.eql('PENDING');",
+                  "});",
+                  "pm.test('attributed to the submitting technician', function () {",
+                  "    pm.expect(pm.response.json().requesterId).to.not.eql(null);",
+                  "});",
+                  "pm.environment.set('reqId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{techToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"items\":[{\"materialId\":{{materialId}},\"quantity\":3}],\"taskId\":\"42\",\"urgency\":\"HIGH\",\"notes\":\"Needed for job 42\"}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/material-request",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "inventory", "material-request"]
+            }
+          }
+        },
+        {
+          "name": "2. POST -> approve as Admin (APPROVED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 APPROVED', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('APPROVED');",
+                  "});",
+                  "pm.test('reviewer recorded', function () {",
+                  "    pm.expect(pm.response.json().reviewerId).to.not.eql(null);",
+                  "    pm.expect(pm.response.json().reviewedAt).to.not.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{adminToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"notes\":\"Approved - in stock\",\"notifyRequester\":true}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/material-requests/{{reqId}}/approve",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "inventory", "material-requests", "{{reqId}}", "approve"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+{
+  "info": {
+    "name": "SLT_Auth_Collection",
+    "description": "AUTH-009 — protected endpoints must answer an unauthenticated request with HTTP 401. Run with: newman run SLT_Auth_Collection.json --env-var baseUrl=http://localhost:8080 (requires a running fieldops instance). The executable twin that runs without a live server is fieldops/src/test/java/lk/slt/fieldops/security/SltAuthCollectionTest.java::noTokenReturns401.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    }
+  ],
+  "item": [
+    {
+      "name": "No_Token_Returns_401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('GET /api/faults without a token returns 401', function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "",
+              "pm.test('401 response carries an error message', function () {",
+              "    pm.expect(pm.response.text()).to.not.be.empty;",
+              "    var body = pm.response.text();",
+              "    pm.expect(body.includes('Unauthorized') || body.toLowerCase().includes('token')).to.be.true;",
+              "});",
+              "",
+              "pm.test('no fault data leaks to an unauthenticated caller', function () {",
+              "    pm.expect(pm.response.text()).to.not.include('faultNumber');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/faults",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "faults"]
+        },
+        "description": "No Authorization header is sent."
+      },
+      "response": []
+    },
+    {
+      "name": "No_Token_Post_Returns_401",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('POST /api/faults without a token returns 401', function () {",
+              "    pm.response.to.have.status(401);",
+              "});",
+              "",
+              "pm.test('401 response carries an error message', function () {",
+              "    pm.expect(pm.response.text()).to.not.be.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"description\":\"no token\"}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/faults",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "faults"]
+        },
+        "description": "No Authorization header is sent."
+      },
+      "response": []
+    }
+  ]
+}

@@ -47,8 +47,8 @@ public class Payment {
     @Column(name = "fault_number", length = 30)
     private String faultNumber;
 
-    @Column(name = "branch_id", nullable = false)
-    private Long branchId;
+    @Column(name = "opmc_id", nullable = false)
+    private Long opmcId;
 
     @Column(name = "customer_id", nullable = false)
     private Long customerId;
@@ -177,7 +177,7 @@ public class Payment {
     public String        getJobNumber()               { return jobNumber; }
     public Long          getFaultId()                 { return faultId; }
     public String        getFaultNumber()             { return faultNumber; }
-    public Long          getBranchId()                { return branchId; }
+    public Long          getOpmcId()                  { return opmcId; }
     public Long          getCustomerId()              { return customerId; }
     public String        getCustomerName()            { return customerName; }
     public Long          getTeamLeadId()              { return teamLeadId; }
@@ -221,7 +221,7 @@ public class Payment {
     public void setJobNumber(String v)                  { this.jobNumber               = v; }
     public void setFaultId(Long v)                      { this.faultId                 = v; }
     public void setFaultNumber(String v)                { this.faultNumber             = v; }
-    public void setBranchId(Long v)                     { this.branchId                = v; }
+    public void setOpmcId(Long v)                       { this.opmcId                  = v; }
     public void setCustomerId(Long v)                   { this.customerId              = v; }
     public void setCustomerName(String v)               { this.customerName            = v; }
     public void setTeamLeadId(Long v)                   { this.teamLeadId              = v; }

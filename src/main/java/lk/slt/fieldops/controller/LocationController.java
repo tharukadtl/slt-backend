@@ -3,6 +3,8 @@ package lk.slt.fieldops.controller;
 import jakarta.validation.Valid;
 import lk.slt.fieldops.dto.LocationResponseDTO;
 import lk.slt.fieldops.dto.LocationUpdateRequest;
+import lk.slt.fieldops.dto.ShortestPathRequest;
+import lk.slt.fieldops.dto.ShortestPathResponseDTO;
 import lk.slt.fieldops.service.LocationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,9 +36,10 @@ public class LocationController {
     @GetMapping("/technician/{technicianId}")
     @PreAuthorize("hasAnyRole('CLIENT','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<LocationResponseDTO> getTechnicianLocation(
-            @PathVariable Long technicianId) {
-        log.info("GET /api/location/technician/{}", technicianId);
-        return ResponseEntity.ok(locationService.getTechnicianLocation(technicianId));
+            @PathVariable Long technicianId,
+            @AuthenticationPrincipal Long callerId) {
+        log.info("GET /api/location/technician/{} requested by userId={}", technicianId, callerId);
+        return ResponseEntity.ok(locationService.getTechnicianLocation(callerId, technicianId));
     }
 
     @GetMapping("/all-active")
@@ -70,5 +73,20 @@ public class LocationController {
         log.info("POST /api/location/offline userId={}", userId);
         locationService.markTechnicianOffline(userId);
         return ResponseEntity.ok().build();
+    }
+
+    // FR-29, SRS 5.6.6 — thin proxy to the Flask AI module's shortest-path
+    // endpoint. Mobile has no direct network path to that service, only to
+    // this backend, so this makes it reachable without any new client-side
+    // network config. See LocationService.getShortestPathToFault().
+    @PostMapping("/shortest-path")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD')")
+    public ResponseEntity<ShortestPathResponseDTO> getShortestPath(
+            @Valid @RequestBody ShortestPathRequest request,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/location/shortest-path userId={}, current=({},{}), fault=({},{})",
+                userId, request.getCurrentLat(), request.getCurrentLng(),
+                request.getFaultLat(), request.getFaultLng());
+        return ResponseEntity.ok(locationService.getShortestPathToFault(request));
     }
 }

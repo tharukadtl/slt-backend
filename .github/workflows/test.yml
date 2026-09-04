@@ -1,0 +1,22 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # ubuntu-latest ships a real, running Docker Server pre-installed (confirmed
+      # against actions/runner-images' own Ubuntu 24.04 readme, not assumed) --
+      # Testcontainers needs nothing extra to reach it.
+      - name: Run tests
+        run: ./mvnw test

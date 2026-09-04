@@ -1,7 +1,9 @@
 package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
+import lk.slt.fieldops.dto.AssignTechnicianRequest;
 import lk.slt.fieldops.dto.CreateVehicleRequest;
+import lk.slt.fieldops.dto.SetVehicleStatusRequest;
 import lk.slt.fieldops.entity.Vehicle;
 import lk.slt.fieldops.entity.VehicleAssignment;
 import lk.slt.fieldops.service.VehicleService;
@@ -21,10 +23,11 @@ import java.util.Map;
  *
  * VEHICLE CRUD
  *   POST   /api/vehicles                   Create vehicle
- *   GET    /api/vehicles                   List (filter by branchId)
+ *   GET    /api/vehicles                   List (filter by opmcId)
  *   GET    /api/vehicles/{id}              Get one
  *   PUT    /api/vehicles/{id}              Update vehicle
- *   PATCH  /api/vehicles/{id}/status       Set status (ACTIVE/INACTIVE/UNDER_MAINTENANCE)
+ *   PATCH  /api/vehicles/{id}/status       Set status (AVAILABLE/IN_USE/UNDER_REPAIR/INACTIVE)
+ *   PATCH  /api/vehicles/{id}/assign-technician  Admin assigns/unassigns a technician
  *
  * ASSIGNMENT
  *   GET    /api/vehicles/assignment/today  TL: get today's vehicle assignment
@@ -58,14 +61,14 @@ public class VehicleController {
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
     public ResponseEntity<List<Vehicle>> getVehicles(
-            @RequestParam(required = false) Long    branchId,
+            @RequestParam(required = false) Long    opmcId,
             @RequestParam(required = false) Boolean activeOnly) {
 
-        if (branchId != null && Boolean.TRUE.equals(activeOnly)) {
-            return ResponseEntity.ok(vehicleService.getActiveByBranch(branchId));
+        if (opmcId != null && Boolean.TRUE.equals(activeOnly)) {
+            return ResponseEntity.ok(vehicleService.getActiveByOpmc(opmcId));
         }
-        if (branchId != null) {
-            return ResponseEntity.ok(vehicleService.getByBranch(branchId));
+        if (opmcId != null) {
+            return ResponseEntity.ok(vehicleService.getByOpmc(opmcId));
         }
         // Return all vehicles
         return ResponseEntity.ok(vehicleService.getAll());
@@ -92,9 +95,17 @@ public class VehicleController {
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Vehicle> setStatus(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body) {
-        String status = body.get("status");
-        return ResponseEntity.ok(vehicleService.setStatus(id, status));
+            @Valid @RequestBody SetVehicleStatusRequest body) {
+        return ResponseEntity.ok(vehicleService.setStatus(id, body.getStatus().name()));
+    }
+
+    // ── ASSIGN/UNASSIGN TECHNICIAN ────────────────────────────────────────────
+    @PatchMapping("/{id}/assign-technician")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<Vehicle> assignTechnician(
+            @PathVariable Long id,
+            @RequestBody AssignTechnicianRequest body) {
+        return ResponseEntity.ok(vehicleService.assignTechnician(id, body.getTechnicianId()));
     }
 
     // ── TODAY'S ASSIGNMENT (Team Lead) ────────────────────────────────────────

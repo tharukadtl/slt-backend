@@ -18,6 +18,13 @@ public class MaterialCategory {
     @Column(nullable = false, length = 100)
     private String name;
 
+    // Cause/Material hierarchy import (2026-08-21): the real WFMS
+    // MATERIALCATEGORYCODE/MATERIALSUBCATEGORYCODE value, nullable (this table
+    // had no natural-key column before this import) so app-created categories
+    // without a WFMS code are unaffected.
+    @Column(length = 30, unique = true)
+    private String code;
+
     @Column(length = 500)
     private String description;
 
@@ -37,6 +44,7 @@ public class MaterialCategory {
 
     public Long          getId()          { return id; }
     public String        getName()        { return name; }
+    public String        getCode()        { return code; }
     public String        getDescription() { return description; }
     public Long          getParentId()    { return parentId; }
     public Boolean       getIsActive()    { return isActive; }
@@ -44,6 +52,7 @@ public class MaterialCategory {
 
     public void setId(Long v)            { this.id          = v; }
     public void setName(String v)        { this.name        = v; }
+    public void setCode(String v)        { this.code        = v; }
     public void setDescription(String v) { this.description = v; }
     public void setParentId(Long v)      { this.parentId    = v; }
     public void setIsActive(Boolean v)   { this.isActive    = v; }

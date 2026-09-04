@@ -81,6 +81,24 @@ public class User {
     @Column(name = "preferred_language", nullable = false, length = 10)
     private Language preferredLanguage = Language.ENGLISH;
 
+    // Real persistence for notification preferences — previously the mobile
+    // app collected these on 6 screens but the value was never forwarded to
+    // the backend at all (Critical #22, QA_Compliance_Consolidated_Report.md).
+    @Column(name = "notify_status_updates", nullable = false)
+    private Boolean notifyStatusUpdates = true;
+
+    @Column(name = "notify_technician_assigned", nullable = false)
+    private Boolean notifyTechnicianAssigned = true;
+
+    @Column(name = "notify_job_completed", nullable = false)
+    private Boolean notifyJobCompleted = true;
+
+    @Column(name = "notify_billing", nullable = false)
+    private Boolean notifyBilling = true;
+
+    @Column(name = "notify_promotions", nullable = false)
+    private Boolean notifyPromotions = false;
+
     // ─── Identity extras ──────────────────────────────────
     @Column(name = "full_name_nic", length = 150)
     private String fullNameNic;
@@ -97,15 +115,17 @@ public class User {
     @Column(name = "profile_photo_url", length = 500)
     private String profilePhotoUrl;
 
-    // ─── Branch / Workgroup ───────────────────────────────
-    @Column(name = "branch_id")
-    private Long branchId;
+    // ─── OPMC / Work Group ─────────────────────────────────
+    @Column(name = "opmc_id")
+    private Long opmcId;
 
-    @Column(name = "branch_name", length = 100)
-    private String branchName;
+    @Column(name = "opmc_name", length = 100)
+    private String opmcName;
 
-    @Column(name = "workgroup_id")
-    private Long workgroupId;
+    // Stage C: real FK (was a loose Long) — column name unchanged, so no migration needed.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "workgroup_id")
+    private WorkGroup workgroup;
 
     // ─── Tokens ───────────────────────────────────────────
     @Column(name = "fcm_token", length = 512)
@@ -168,14 +188,19 @@ public class User {
     public LocalDateTime getAccountLockedUntil()   { return accountLockedUntil; }
     public LocalDateTime getPasswordChangedAt()    { return passwordChangedAt; }
     public Language      getPreferredLanguage()    { return preferredLanguage; }
-    public Long          getBranchId()             { return branchId; }
-    public String        getBranchName()           { return branchName; }
+    public Boolean       getNotifyStatusUpdates()      { return notifyStatusUpdates; }
+    public Boolean       getNotifyTechnicianAssigned() { return notifyTechnicianAssigned; }
+    public Boolean       getNotifyJobCompleted()       { return notifyJobCompleted; }
+    public Boolean       getNotifyBilling()            { return notifyBilling; }
+    public Boolean       getNotifyPromotions()         { return notifyPromotions; }
+    public Long          getOpmcId()               { return opmcId; }
+    public String        getOpmcName()             { return opmcName; }
     public String        getFullNameNic()           { return fullNameNic; }
     public String        getNicNumber()             { return nicNumber; }
     public String        getAddress()               { return address; }
     public String        getSubscriptionNumber()    { return subscriptionNumber; }
     public String        getProfilePhotoUrl()       { return profilePhotoUrl; }
-    public Long          getWorkgroupId()           { return workgroupId; }
+    public WorkGroup     getWorkgroup()              { return workgroup; }
     public String        getFcmToken()              { return fcmToken; }
     public String        getFirebaseToken()         { return firebaseToken; }
     public LocalDateTime getLastLogin()             { return lastLogin; }
@@ -204,14 +229,19 @@ public class User {
     public void setAccountLockedUntil(LocalDateTime v) { this.accountLockedUntil  = v; }
     public void setPasswordChangedAt(LocalDateTime v)  { this.passwordChangedAt   = v; }
     public void setPreferredLanguage(Language v)       { this.preferredLanguage   = v; }
-    public void setBranchId(Long v)                    { this.branchId            = v; }
-    public void setBranchName(String v)                { this.branchName          = v; }
+    public void setNotifyStatusUpdates(Boolean v)      { this.notifyStatusUpdates      = v; }
+    public void setNotifyTechnicianAssigned(Boolean v) { this.notifyTechnicianAssigned = v; }
+    public void setNotifyJobCompleted(Boolean v)       { this.notifyJobCompleted       = v; }
+    public void setNotifyBilling(Boolean v)            { this.notifyBilling            = v; }
+    public void setNotifyPromotions(Boolean v)         { this.notifyPromotions         = v; }
+    public void setOpmcId(Long v)                      { this.opmcId              = v; }
+    public void setOpmcName(String v)                  { this.opmcName            = v; }
     public void setFullNameNic(String v)               { this.fullNameNic         = v; }
     public void setNicNumber(String v)                 { this.nicNumber           = v; }
     public void setAddress(String v)                   { this.address             = v; }
     public void setSubscriptionNumber(String v)        { this.subscriptionNumber  = v; }
     public void setProfilePhotoUrl(String v)           { this.profilePhotoUrl     = v; }
-    public void setWorkgroupId(Long v)                 { this.workgroupId         = v; }
+    public void setWorkgroup(WorkGroup v)              { this.workgroup           = v; }
     public void setFcmToken(String v)                  { this.fcmToken            = v; }
     public void setFirebaseToken(String v)             { this.firebaseToken       = v; }
     public void setLastLogin(LocalDateTime v)          { this.lastLogin           = v; }

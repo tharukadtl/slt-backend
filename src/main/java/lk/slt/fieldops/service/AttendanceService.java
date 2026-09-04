@@ -4,8 +4,10 @@ import lk.slt.fieldops.dto.AttendanceDTO;
 import lk.slt.fieldops.entity.CheckInOut;
 import lk.slt.fieldops.entity.User;
 import lk.slt.fieldops.repository.CheckInOutRepository;
+import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.JobRepository;
 import lk.slt.fieldops.repository.UserRepository;
+import lk.slt.fieldops.shared.exception.DuplicateSessionException;
 import lk.slt.fieldops.websocket
         .WebSocketEventPublisher;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +33,9 @@ public class AttendanceService {
     private final CheckInOutRepository checkInOutRepository;
     private final UserRepository       userRepository;
     private final JobRepository        jobRepository;
+    private final FaultRepository      faultRepository;
     private final WebSocketEventPublisher webSocketEventPublisher;
+    private final NotificationService  notificationService;
 
     private static final DateTimeFormatter
             DATE_FMT =
@@ -70,19 +74,19 @@ public class AttendanceService {
                         .existsTodayCheckIn(
                                 userId, startOfDay);
 
+        // QA_Compliance_Consolidated_Report.md ATT-002 — this used to silently return the
+        // existing check-in record (200) on a duplicate BOD attempt, with only a log.warn and no
+        // error signal to the caller — indistinguishable from a genuine first check-in, unlike
+        // the Team Lead BOD path (JobService.performBod/performEod), which already rejects a
+        // duplicate with DuplicateSessionException -> a real 409. Reused directly here instead
+        // of inventing a second exception type for the identical situation.
         if (alreadyCheckedIn) {
-            // Return existing check-in record
-            Optional<CheckInOut> existing =
-                    checkInOutRepository
-                            .findTodayByUserId(
-                                    userId, startOfDay);
-            if (existing.isPresent()) {
-                log.warn(
-                        "User {} already checked "
-                                + "in today",
-                        userId);
-                return mapToResponse(existing.get());
-            }
+            log.warn(
+                    "User {} already checked "
+                            + "in today",
+                    userId);
+            throw new DuplicateSessionException(
+                    "You have already checked in today.");
         }
 
         // Create new check-in record
@@ -111,6 +115,18 @@ public class AttendanceService {
                         + LocalDateTime.now()
                         .format(TIME_FMT),
                 "ATTENDANCE_CHECK_IN");
+
+        // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: the sendToRole broadcast
+        // above is WebSocket-only. Mirrors FaultService.notifyAdminsOfNewFault's
+        // loop-over-admins shape for the same "broadcast to whichever admins are on shift"
+        // requirement.
+        List<User> admins = new ArrayList<>();
+        admins.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.ADMIN));
+        admins.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.SUPER_ADMIN));
+        for (User a : admins) {
+            notificationService.notifyStaffCheckedIn(
+                    a.getId(), a.getFcmToken(), user.getFullName(), saved.getId());
+        }
 
         log.info(
                 "BOD Check-In successful "
@@ -156,6 +172,29 @@ public class AttendanceService {
                     "User already checked out today");
         }
 
+        // SRS 5.3.1.4 — validate BEFORE any mutation so a missing reason
+        // never leaves checkout half-applied.
+        List<lk.slt.fieldops.entity.Job> openJobs = findOpenJobsForToday(userId);
+        java.util.Map<Long, String> reasonsByJobId = new java.util.HashMap<>();
+        if (request.getOpenJobReasons() != null) {
+            for (AttendanceDTO.JobHandoverReason r : request.getOpenJobReasons()) {
+                if (r.getJobId() != null && r.getReason() != null && !r.getReason().isBlank()) {
+                    reasonsByJobId.put(r.getJobId(), r.getReason().trim());
+                }
+            }
+        }
+        if (!openJobs.isEmpty()) {
+            List<String> missing = openJobs.stream()
+                .filter(j -> !reasonsByJobId.containsKey(j.getId()))
+                .map(j -> j.getJobNumber() != null ? j.getJobNumber() : "#" + j.getId())
+                .collect(Collectors.toList());
+            if (!missing.isEmpty()) {
+                throw new RuntimeException(
+                    "A reason is required for each open job before you can check out: "
+                        + String.join(", ", missing));
+            }
+        }
+
         // Update check-out details
         checkIn.setCheckOutTime(
                 LocalDateTime.now());
@@ -184,10 +223,51 @@ public class AttendanceService {
         CheckInOut saved =
                 checkInOutRepository.save(checkIn);
 
-        // Return technician's open jobs to team lead pool
-        int returnedJobs = jobRepository
-                .returnJobsOnTechnicianCheckout(userId, LocalDate.now());
-        log.info("Checkout: returned {} open jobs to team lead for technicianId={}", returnedJobs, userId);
+        // Return technician's open jobs to team lead pool, each carrying its
+        // own mandatory handover reason (SRS 5.3.1.4) — this is also exactly
+        // the data shape a future Team Lead pending/escalation queue would
+        // read (job + eodHandoverReason + eodHandoverAt), so it's kept on the
+        // Job entity itself rather than folded into the attendance record.
+        LocalDateTime handoverAt = LocalDateTime.now();
+        for (lk.slt.fieldops.entity.Job job : openJobs) {
+            job.setStatus(lk.slt.fieldops.entity.Job.JobStatus.PENDING);
+            job.setTechnicianId(null);
+            job.setTechnicianName(null);
+            String handoverReason = reasonsByJobId.get(job.getId());
+            job.setEodHandoverReason(handoverReason);
+            job.setEodHandoverAt(handoverAt);
+            jobRepository.save(job);
+
+            // QA_Compliance_Consolidated_Report.md — this handover previously reached the Job/
+            // Fault rows only; the Team Lead who now owns the reassignment was never told at all.
+            // Same resolve-recipient-then-call-NotificationService pattern JobService.updateStatus
+            // already uses for the comparable "technician handed a job back" event (REJECTED ->
+            // notifyJobRejectedToTeamLead) — a distinct method there since a handover isn't a
+            // rejection.
+            if (job.getTeamLeadId() != null) {
+                final Long jobIdRef = job.getId();
+                final String jobNum = job.getJobNumber();
+                userRepository.findById(job.getTeamLeadId()).ifPresent(tl ->
+                    notificationService.notifyJobEodHandoverToTeamLead(
+                        tl.getId(), tl.getFcmToken(), jobNum, jobIdRef, handoverReason));
+            }
+
+            // #23 — the shift is ending, so nobody is actively working this job now
+            // regardless of its own JobStatus. Pull the linked fault off IN_PROGRESS
+            // back into the "open" bucket (ASSIGNED), keeping the Team Lead assignment
+            // intact since that Team Lead still owns it. Same terminal-fault guard
+            // JobService.routeOpenJobsAtEod's FORWARD_TO_ADMIN uses.
+            if (job.getFaultId() != null) {
+                faultRepository.findById(job.getFaultId()).ifPresent(fault -> {
+                    if (fault.getStatus() != lk.slt.fieldops.entity.Fault.FaultStatus.COMPLETED
+                            && fault.getStatus() != lk.slt.fieldops.entity.Fault.FaultStatus.CANCELLED) {
+                        fault.setStatus(lk.slt.fieldops.entity.Fault.FaultStatus.ASSIGNED);
+                        faultRepository.save(fault);
+                    }
+                });
+            }
+        }
+        log.info("Checkout: returned {} open jobs to team lead for technicianId={}", openJobs.size(), userId);
 
         // Notify admin via WebSocket
         long workMinutes =
@@ -212,6 +292,21 @@ public class AttendanceService {
                 userId, hours, mins);
 
         return mapToResponse(saved);
+    }
+
+    private static final java.util.Set<lk.slt.fieldops.entity.Job.JobStatus> OPEN_JOB_STATUSES =
+        java.util.Set.of(
+            lk.slt.fieldops.entity.Job.JobStatus.PENDING,
+            lk.slt.fieldops.entity.Job.JobStatus.ACCEPTED,
+            lk.slt.fieldops.entity.Job.JobStatus.IN_PROGRESS,
+            lk.slt.fieldops.entity.Job.JobStatus.HOLD);
+
+    /** Matches the same "still open" status set the old bulk-update query used. */
+    private List<lk.slt.fieldops.entity.Job> findOpenJobsForToday(Long technicianId) {
+        return jobRepository.findByTechnicianIdAndScheduledDate(technicianId, LocalDate.now())
+            .stream()
+            .filter(j -> OPEN_JOB_STATUSES.contains(j.getStatus()))
+            .collect(Collectors.toList());
     }
 
     // ─── Today's Attendance ───────────────────────────────
@@ -379,22 +474,22 @@ public class AttendanceService {
     // ─── Team Today ───────────────────────────────────────
 
     public AttendanceDTO.TeamAttendanceDTO
-    getTeamToday(Long branchId) {
+    getTeamToday(Long opmcId) {
         log.debug(
                 "Getting team attendance "
-                        + "for branchId={}",
-                branchId);
+                        + "for opmcId={}",
+                opmcId);
 
         LocalDateTime startOfDay =
                 LocalDate.now().atStartOfDay();
 
-        // Get all team members for branch
+        // Get all team members for this OPMC
         List<User> teamMembers =
                 userRepository.findAll()
                         .stream()
                         .filter(u ->
-                                 u.getBranchId()
-                                        .equals(branchId)
+                                 u.getOpmcId()
+                                        .equals(opmcId)
                                         && u.getRole()
                                         != null
                                         && (u.getRole()
@@ -407,11 +502,11 @@ public class AttendanceService {
                                                 "TEAM_LEAD")))
                         .collect(Collectors.toList());
 
-        // Get today's check-ins for this branch
+        // Get today's check-ins for this OPMC
         List<CheckInOut> todayRecords =
                 checkInOutRepository
-                        .findTeamTodayByBranchId(
-                                branchId, startOfDay);
+                        .findTeamTodayByOpmcId(
+                                opmcId, startOfDay);
 
         // Build member attendance DTOs
         List<AttendanceDTO.MemberAttendanceDTO>
@@ -541,8 +636,8 @@ public class AttendanceService {
 
         return AttendanceDTO.TeamAttendanceDTO
                 .builder()
-                .teamId(branchId)
-                .teamName("Branch " + branchId)
+                .teamId(opmcId)
+                .teamName("OPMC " + opmcId)
                 .date(LocalDate.now()
                         .format(DATE_FMT))
                 .totalMembers(teamMembers.size())

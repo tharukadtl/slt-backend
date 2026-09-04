@@ -29,7 +29,16 @@ public class ReportRequestDTO {
     public static final String TYPE_ATTENDANCE =
             "ATTENDANCE";
 
-    // REP-10 (spec §6 Required Reports)
+    // REP-01..REP-10 (spec §6 Required Reports)
+    public static final String TYPE_DAILY_FAULT_SUMMARY   = "DAILY_FAULT_SUMMARY";   // REP-01
+    // TYPE_TECHNICIAN_PERFORMANCE above covers                                          REP-02
+    public static final String TYPE_FAULT_AGING            = "FAULT_AGING";           // REP-03
+    // TYPE_FINANCIAL_SUMMARY above covers                                              REP-04
+    public static final String TYPE_MATERIAL_COST          = "MATERIAL_COST";         // REP-05
+    public static final String TYPE_AI_FORECAST            = "AI_FORECAST";           // REP-06
+    public static final String TYPE_GEOGRAPHIC_DEMAND      = "GEOGRAPHIC_DEMAND";     // REP-07
+    public static final String TYPE_KPI_PERFORMANCE        = "KPI_PERFORMANCE";       // REP-08
+    // TYPE_ATTENDANCE above covers                                                     REP-09
     public static final String TYPE_AUDIT_TRAIL            = "AUDIT_TRAIL";           // REP-10
 
     // Export formats
@@ -62,11 +71,22 @@ public class ReportRequestDTO {
     // Optional filters
     private String technicianId;
     private String teamId;
-    private String branchId;
     private String category;
     private String status;
 
+    // Stage F #2/#3 — resolved server-side via OpmcAccessGuard.resolveOpmcFilter(callerId),
+    // null meaning unscoped (Super Admin). Never set from client input — the export endpoints
+    // bind a client-supplied ReportRequestDTO body directly, so the controller always
+    // overwrites this field itself after binding rather than trusting whatever the client sent.
+    private Long callerOpmcId;
+
+    // Additional filters used by REP-01..REP-10
+    private String priority;
+    private String region;
+    private String workgroupId;
+    private String actorId;
     private String entityType;
+    private Integer horizonDays;   // REP-06 forecast horizon
 
     // Optional column selection
     private List<String> columns;

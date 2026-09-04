@@ -3,11 +3,15 @@ package lk.slt.fieldops.controller;
 import jakarta.validation.Valid;
 import lk.slt.fieldops.dto.CreateIssueRequest;
 import lk.slt.fieldops.dto.FaultDTO;
+import lk.slt.fieldops.dto.LocationResponseDTO;
 import lk.slt.fieldops.dto.ReportFaultRequest;
 import lk.slt.fieldops.entity.FaultHistory;
+import lk.slt.fieldops.entity.Job;
 import lk.slt.fieldops.entity.User;
+import lk.slt.fieldops.repository.JobRepository;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.service.FaultService;
+import lk.slt.fieldops.service.LocationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -33,10 +37,15 @@ public class IssueController {
 
     private final FaultService    faultService;
     private final UserRepository  userRepo;
+    private final JobRepository   jobRepo;
+    private final LocationService locationService;
 
-    public IssueController(FaultService faultService, UserRepository userRepo) {
-        this.faultService = faultService;
-        this.userRepo     = userRepo;
+    public IssueController(FaultService faultService, UserRepository userRepo,
+                            JobRepository jobRepo, LocationService locationService) {
+        this.faultService    = faultService;
+        this.userRepo        = userRepo;
+        this.jobRepo         = jobRepo;
+        this.locationService = locationService;
     }
 
     // ── GET /api/issues ──────────────────────────────────────────────────────
@@ -66,8 +75,10 @@ public class IssueController {
     // ── GET /api/issues/{id} ──────────────────────────────────────────────────
     @GetMapping("/{id}")
     public ResponseEntity<IssueResponse> getIssueById(
-            @PathVariable Long id) {
-        return ResponseEntity.ok(toIssueResponse(faultService.getFaultById(id)));
+            @PathVariable Long id, @AuthenticationPrincipal Long userId) {
+        FaultDTO fault = faultService.getFaultById(id);
+        assertOwnedByCaller(fault, userId);
+        return ResponseEntity.ok(toIssueResponse(fault));
     }
 
     // ── POST /api/issues ──────────────────────────────────────────────────────
@@ -94,7 +105,8 @@ public class IssueController {
             req.setLongitude(body.getLocation().getLongitude());
         }
 
-        req.setBranchId(user.getBranchId() != null ? user.getBranchId() : 1L);
+        req.setPhotoUrls(body.getPhotos());
+        req.setOpmcId(user.getOpmcId() != null ? user.getOpmcId() : 1L);
 
         String name  = user.getFullName() != null ? user.getFullName() : user.getUsername();
         String phone = user.getPhone() != null ? user.getPhone() : user.getPhoneNumber();
@@ -109,6 +121,8 @@ public class IssueController {
             @PathVariable Long id,
             @Valid @RequestBody CreateIssueRequest body,
             @AuthenticationPrincipal Long userId) {
+
+        assertOwnedByCaller(faultService.getFaultById(id), userId);
 
         String desc = body.getDescription();
         if (body.getTitle() != null && !body.getTitle().isBlank()) {
@@ -131,6 +145,8 @@ public class IssueController {
             @RequestBody(required = false) Map<String, String> body,
             @AuthenticationPrincipal Long userId) {
 
+        assertOwnedByCaller(faultService.getFaultById(id), userId);
+
         String reason = body != null ? body.get("reason") : "Cancelled by client";
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
@@ -143,26 +159,57 @@ public class IssueController {
 
     // ── GET /api/issues/{id}/technician-location ──────────────────────────────
     @GetMapping("/{id}/technician-location")
-    public ResponseEntity<Map<String, Object>> getTechnicianLocation(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getTechnicianLocation(
+            @PathVariable Long id, @AuthenticationPrincipal Long userId) {
         FaultDTO fault = faultService.getFaultById(id);
+        assertOwnedByCaller(fault, userId);
         if (fault.getAssignedTeamLeadId() == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "No technician assigned yet"));
         }
-        // Real-time location not implemented yet — return stub
-        return ResponseEntity.ok(Map.of(
-                "technicianId",   fault.getAssignedTeamLeadId().toString(),
-                "technicianName", fault.getAssignedTeamLeadName() != null
-                                      ? fault.getAssignedTeamLeadName() : "Technician",
-                "latitude",       6.9271,
-                "longitude",      79.8612,
-                "eta",            30,
-                "distance",       "On the way",
-                "lastUpdated",    java.time.LocalDateTime.now().toString()
-        ));
+
+        Job job = jobRepo.findFirstByFaultIdOrderByCreatedAtDesc(id).orElse(null);
+        if (job == null || job.getTechnicianId() == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "No technician assigned yet"));
+        }
+
+        try {
+            LocationResponseDTO loc = (fault.getLatitude() != null && fault.getLongitude() != null)
+                    ? locationService.getTechnicianLocationWithEta(
+                        userId, job.getTechnicianId(), fault.getLatitude(), fault.getLongitude())
+                    : locationService.getTechnicianLocation(userId, job.getTechnicianId());
+
+            return ResponseEntity.ok(Map.of(
+                    "technicianId",   job.getTechnicianId().toString(),
+                    "technicianName", job.getTechnicianName() != null ? job.getTechnicianName() : "Technician",
+                    "latitude",       loc.getLatitude(),
+                    "longitude",      loc.getLongitude(),
+                    "eta",            loc.getEstimatedArrival() != null ? loc.getEstimatedArrival() : "Unknown",
+                    "distance",       loc.getDistanceKm() != null ? loc.getDistanceKm() + " km" : "Unknown",
+                    "lastUpdated",    loc.getLastUpdated() != null ? loc.getLastUpdated().toString() : ""
+            ));
+        } catch (RuntimeException e) {
+            // Technician assigned but hasn't sent a GPS ping yet
+            return ResponseEntity.ok(Map.of(
+                    "technicianId",   job.getTechnicianId().toString(),
+                    "technicianName", job.getTechnicianName() != null ? job.getTechnicianName() : "Technician",
+                    "eta",            "Unknown",
+                    "distance",       "Location not available yet",
+                    "lastUpdated",    ""
+            ));
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** Least-privilege guard: a client may only read/act on their own issues. */
+    private void assertOwnedByCaller(FaultDTO fault, Long callerId) {
+        if (fault.getCustomerId() == null || !fault.getCustomerId().equals(callerId)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "You do not have access to this issue.");
+        }
+    }
 
     private IssueResponse toIssueResponse(FaultDTO f) {
         IssueResponse r = new IssueResponse();
@@ -175,6 +222,7 @@ public class IssueController {
         r.clientId    = f.getCustomerId() != null ? f.getCustomerId().toString() : null;
         r.technicianId = f.getAssignedTeamLeadId() != null
                           ? f.getAssignedTeamLeadId().toString() : null;
+        r.photos = f.getPhotoUrls() != null ? f.getPhotoUrls().split(",") : null;
 
         IssueResponse.LocationResponse loc = new IssueResponse.LocationResponse();
         loc.address   = f.getLocationAddress();
@@ -200,10 +248,11 @@ public class IssueController {
     private String mapCategoryToBackend(String mobile) {
         if (mobile == null) return "OTHER";
         return switch (mobile.toLowerCase()) {
-            case "broadband", "internet", "fiber" -> "INTERNET";
-            case "telephone", "phone"             -> "PHONE";
-            case "television", "tv", "peotv"      -> "TV";
-            default                               -> "OTHER";
+            case "broadband", "internet" -> "INTERNET";
+            case "fiber"                 -> "FIBER";
+            case "telephone", "phone"    -> "PHONE";
+            case "television", "tv", "peotv" -> "TV";
+            default                      -> "OTHER";
         };
     }
 
@@ -211,6 +260,7 @@ public class IssueController {
         if (backend == null) return "other";
         return switch (backend.toUpperCase()) {
             case "INTERNET" -> "broadband";
+            case "FIBER"    -> "fiber";
             case "PHONE"    -> "telephone";
             case "TV"       -> "television";
             default         -> "other";

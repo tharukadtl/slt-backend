@@ -23,7 +23,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class StockTransaction {
 
-    public enum TransactionType { STOCK_IN, STOCK_OUT, ADJUSTMENT, INITIAL_STOCK }
+    public enum TransactionType {
+        STOCK_IN, STOCK_OUT, ADJUSTMENT, INITIAL_STOCK,
+        RESTOCK, DAMAGE, RETURN, USAGE
+    }
     public enum ReferenceType   { JOB, MANUAL_ADJUSTMENT, INITIAL_STOCK }
 
     @Id

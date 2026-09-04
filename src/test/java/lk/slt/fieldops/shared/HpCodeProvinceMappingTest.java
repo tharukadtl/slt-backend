@@ -3,11 +3,11 @@ package lk.slt.fieldops.shared;
 import lk.slt.fieldops.entity.Opmc;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -15,26 +15,45 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * H1 (Province/HPCODE resolution) — validates {@link HpCodeProvinceMapping} against the REAL, complete
- * {@code docs/master-data/OPMC.csv} (62 rows), not a hand-picked subset or hardcoded duplicate of it.
- * Reading the actual persisted file (rather than re-typing its rows into the test) means this test
- * breaks the moment the two drift apart, instead of silently validating a copy that's stopped matching
- * the real source of truth.
+ * OPMC export (62 rows), not a hand-picked subset or hardcoded duplicate of it. Reading the actual
+ * persisted file (rather than re-typing its rows into the test) means this test breaks the moment the
+ * two drift apart, instead of silently validating a copy that's stopped matching the real source of
+ * truth.
+ *
+ * <p><b>2026-09-03, CI-portability fix.</b> Originally read {@code ../docs/master-data/OPMC.csv} — a
+ * path outside this repository entirely. {@code fieldops} is its own standalone git repository
+ * (confirmed: no enclosing monorepo, {@code docs/} lives in a sibling directory on the machine this
+ * was developed on, not part of {@code fieldops} at all), so a real CI checkout of just this repo never
+ * has that path — confirmed by actually building and running {@code .github/workflows/test.yml}
+ * against a fresh checkout, not assumed. Fixed by committing an identical byte-for-byte copy to
+ * {@code src/test/resources/master-data/OPMC.csv} and reading it off the classpath instead — still the
+ * real, complete file, just no longer reaching outside this repository's own boundary to find it.</p>
  *
  * <p>Plain JUnit, no Spring context — this is pure data/lookup logic with no DB, no HTTP, matching the
  * "unit test for a pure function" convention already used elsewhere in {@code shared/}.
  */
 class HpCodeProvinceMappingTest {
 
-    private static final Path CSV_PATH = Paths.get("..", "docs", "master-data", "OPMC.csv");
+    private static final String CSV_CLASSPATH_RESOURCE = "master-data/OPMC.csv";
 
     private record Row(String opmcCode, String description, String hpCode, String province) {}
 
     private List<Row> readRealFile() throws IOException {
-        List<String> lines = Files.readAllLines(CSV_PATH, StandardCharsets.UTF_8);
+        List<String> lines = new ArrayList<>();
+        try (InputStream in = getClass().getClassLoader().getResourceAsStream(CSV_CLASSPATH_RESOURCE)) {
+            assertNotNull(in, CSV_CLASSPATH_RESOURCE + " must be on the test classpath");
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    lines.add(line);
+                }
+            }
+        }
         assertTrue(lines.size() > 1, "OPMC.csv must have a header plus data rows");
 
         List<Row> rows = new ArrayList<>();

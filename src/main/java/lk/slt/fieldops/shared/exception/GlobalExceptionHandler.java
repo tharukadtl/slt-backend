@@ -1,5 +1,6 @@
 package lk.slt.fieldops.shared.exception;
 
+import org.springframework.beans.TypeMismatchException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -60,6 +61,43 @@ public class GlobalExceptionHandler {
         body.put("message",   ex.getMessage());
         body.put("timestamp", LocalDateTime.now().toString());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<Map<String, Object>> handleConflict(ConflictException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status",    409);
+        body.put("error",     "Conflict");
+        body.put("message",   ex.getMessage());
+        body.put("timestamp", LocalDateTime.now().toString());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidRefreshToken(InvalidRefreshTokenException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status",    401);
+        body.put("error",     "Unauthorized");
+        body.put("message",   ex.getMessage());
+        body.put("timestamp", LocalDateTime.now().toString());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
+    }
+
+    /**
+     * Parameter/path-variable conversion failures. The framework message embeds internal Java type
+     * names (e.g. "Failed to convert value of type 'java.lang.String' to required type
+     * 'java.lang.Long'"), so it is logged server-side only and replaced with a generic client-safe
+     * message. The status stays 400 — the request really is malformed.
+     */
+    @ExceptionHandler(TypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(TypeMismatchException ex) {
+        log.warning("Type mismatch: " + ex.getMessage());
+        Map<String, Object> body = new HashMap<>();
+        body.put("status",    400);
+        body.put("error",     "Bad Request");
+        body.put("message",   "Invalid value supplied for one or more request parameters.");
+        body.put("timestamp", LocalDateTime.now().toString());
+        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(RuntimeException.class)

@@ -5,6 +5,7 @@ import lk.slt.fieldops.entity.*;
 import lk.slt.fieldops.repository.FaultHistoryRepository;
 import lk.slt.fieldops.repository.FaultNoteRepository;
 import lk.slt.fieldops.repository.FaultRepository;
+import lk.slt.fieldops.repository.JobRepository;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.repository.WorkGroupRepository;
 import lk.slt.fieldops.shared.OpmcAccessGuard;
@@ -42,6 +43,10 @@ public class FaultAssignmentService {
             workGroupRepository;
     private final OpmcAccessGuard
             opmcGuard;
+    private final NotificationService
+            notificationService;
+    private final JobRepository
+            jobRepository;
 
     private static final DateTimeFormatter
             FMT = DateTimeFormatter
@@ -194,6 +199,15 @@ public class FaultAssignmentService {
                     "Your fault #" + faultId
                             + " has been assigned to a field team",
                     "TECHNICIAN_ASSIGNED");
+
+            // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: "a customer being
+            // told a technician was assigned to their fault" was WebSocket-only. Distinct
+            // from NOTIF-001's Team-Lead-side gap on this same event (immediately above),
+            // which stays separately open — out of scope here.
+            userRepository.findById(fault.getCustomerId()).ifPresent(customer ->
+                    notificationService.notifyFaultAssignedToCustomer(
+                            customer.getId(), customer.getFcmToken(),
+                            fault.getFaultNumber(), fault.getId()));
         }
 
         log.info(
@@ -773,6 +787,32 @@ public class FaultAssignmentService {
         fault.setAssignedTeamLeadName(null);
         faultRepository.save(fault);
 
+        // QA_Compliance_Consolidated_Report.md — the fault is now fully detached from this
+        // Work Group/Team Lead, but its current Job row (if any) was previously left dangling,
+        // still pointing at this Team Lead — surfaced incorrectly in their own
+        // getTodaysJobsForTeamLead ("Team Jobs"/"Needs Attention" queue on the Team Lead app)
+        // and reassignable via the generic reassignJob action to a technician for a fault that
+        // no longer belongs to their Work Group at all. Job.teamLeadId is NOT NULL
+        // (entity/Job.java:44), so it can never be nulled out to reflect the detachment — the
+        // same treatment JobService.routeOpenJobsAtEod's FORWARD_TO_ADMIN case already
+        // established for the identical "fault forcibly pulled away from this Team Lead" shape
+        // (JobService.java:222-251) is applied here: cancel the stale Job rather than leave it
+        // dangling or attempt an impossible field-clear. findFirstByFaultIdOrderByCreatedAtDesc
+        // is the same "current job representing this fault" lookup IssueController already uses
+        // for the identical question.
+        jobRepository.findFirstByFaultIdOrderByCreatedAtDesc(faultId).ifPresent(job -> {
+            if (job.getStatus() != Job.JobStatus.COMPLETED
+                    && job.getStatus() != Job.JobStatus.CANCELLED) {
+                job.setStatus(Job.JobStatus.CANCELLED);
+                job.setRejectionReason(
+                        "Fault #" + faultId + " transferred back to Admin by "
+                                + teamLead.getFullName() + " from " + previousWorkGroup
+                                + ". Reason: " + req.getReason());
+                job.setRejectedByRole("TEAM_LEAD");
+                jobRepository.save(job);
+            }
+        });
+
         saveHistoryEvent(
                 fault, teamLead,
                 "TRANSFERRED_TO_ADMIN",
@@ -1037,6 +1077,7 @@ public class FaultAssignmentService {
                         .previousValue(previousValue)
                         .newValue(newValue)
                         .isSystem(isSystem)
+                        .ipAddress(lk.slt.fieldops.shared.RequestContext.getClientIp())
                         .build();
 
         faultHistoryRepository.save(history);

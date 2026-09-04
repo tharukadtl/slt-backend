@@ -1,5 +1,6 @@
 package lk.slt.fieldops.controller;
 
+import lk.slt.fieldops.dto.SubmitSignatureRequest;
 import lk.slt.fieldops.entity.Job;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.service.JobService;
@@ -12,7 +13,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,10 +47,10 @@ class JobControllerSignatureTest {
     private static final Long JOB_ID = 55L;
     private static final Long USER_ID = 7L;
 
-    private Map<String, String> body(String signature) {
-        Map<String, String> m = new HashMap<>();
-        m.put("signature", signature);
-        return m;
+    private SubmitSignatureRequest body(String signature) {
+        SubmitSignatureRequest req = new SubmitSignatureRequest();
+        req.setSignature(signature);
+        return req;
     }
 
     /**
@@ -82,7 +82,7 @@ class JobControllerSignatureTest {
     /** Pre-existing behavior must not regress: null signature rejected, no persist. */
     @Test
     void submitSignature_withNull_isRejectedAndNeverPersisted() {
-        Map<String, String> emptyBody = new HashMap<>(); // no "signature" key -> null
+        SubmitSignatureRequest emptyBody = new SubmitSignatureRequest(); // signature never set -> null
         RuntimeException ex = assertThrows(
             RuntimeException.class,
             () -> controller.submitSignature(JOB_ID, emptyBody, USER_ID));

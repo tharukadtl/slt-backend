@@ -6,7 +6,7 @@ import jakarta.validation.constraints.Pattern;
 public class OtpLoginRequest {
 
     @NotBlank(message = "Phone number is required")
-    @Pattern(regexp = "^0[0-9]{9}$", message = "Phone number must be 10 digits starting with 0")
+    @Pattern(regexp = "^07[0-9]{8}$", message = "Invalid phone number format")
     private String phoneNumber;
 
     public String getPhoneNumber() { return phoneNumber; }

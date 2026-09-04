@@ -1,15 +1,21 @@
 package lk.slt.fieldops.service;
 
+import lk.slt.fieldops.dto.KpiDTO;
 import lk.slt.fieldops.dto.ReportRequestDTO;
 import lk.slt.fieldops.dto.ReportResponseDTO;
 import lk.slt.fieldops.entity.*;
 import lk.slt.fieldops.repository.*;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 import com.itextpdf.kernel.colors.ColorConstants;
 import com.itextpdf.kernel.colors.DeviceRgb;
@@ -27,6 +33,7 @@ import com.itextpdf.io.font.constants.StandardFonts;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -44,9 +51,18 @@ public class ReportService {
     private final PaymentRepository paymentRepository;
     private final PaymentApprovalRepository
             paymentApprovalRepository;
+    private final MaterialRepository materialRepository;
+    private final MaterialUsageRepository materialUsageRepository;
     private final StockTransactionRepository stockTransactionRepository;
+    private final CheckInOutRepository checkInOutRepository;
     private final FaultHistoryRepository faultHistoryRepository;
     private final UserAuditLogRepository userAuditLogRepository;
+    private final KpiCalculationService kpiCalculationService;
+    private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
+
+    @Value("${app.ai.base-url:http://localhost:5000}")
+    private String aiBaseUrl;
 
     private static final DateTimeFormatter DATE_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -96,128 +112,13 @@ public class ReportService {
         return new LocalDate[]{start, end};
     }
 
-    // ─── REP-10: Audit Trail Report ────────────────────────
-
-    public ReportResponseDTO getAuditTrailReport(ReportRequestDTO req) {
-        log.info("Generating audit trail report (REP-10)");
-        LocalDate[] range = resolveDateRange(req);
-        LocalDateTime startDt = range[0].atStartOfDay();
-        LocalDateTime endDt = range[1].atTime(23, 59, 59);
-
-        List<ReportResponseDTO.AuditTrailItemDTO> items = new ArrayList<>();
-
-        boolean wantFault = req.getEntityType() == null || req.getEntityType().isBlank()
-                || "FAULT".equalsIgnoreCase(req.getEntityType());
-        boolean wantPayment = req.getEntityType() == null || req.getEntityType().isBlank()
-                || "PAYMENT".equalsIgnoreCase(req.getEntityType());
-        boolean wantStock = req.getEntityType() == null || req.getEntityType().isBlank()
-                || "STOCK".equalsIgnoreCase(req.getEntityType());
-        boolean wantUser = req.getEntityType() == null || req.getEntityType().isBlank()
-                || "USER".equalsIgnoreCase(req.getEntityType());
-
-        if (wantFault) {
-            faultHistoryRepository.findAllRecent().stream()
-                    .filter(h -> h.getCreatedAt() != null && !h.getCreatedAt().isBefore(startDt) && !h.getCreatedAt().isAfter(endDt))
-                    .forEach(h -> {
-                        // Actor identity is embedded in the description as "{name} [{role}]: {reason}"
-                        // rather than the (always-null) `actor` relation — see FaultService.writeHistory().
-                        String actorName = null;
-                        String actorRole = null;
-                        if (h.getDescription() != null && h.getDescription().contains(" [")) {
-                            int bracketStart = h.getDescription().indexOf(" [");
-                            int bracketEnd = h.getDescription().indexOf(']', bracketStart);
-                            actorName = h.getDescription().substring(0, bracketStart);
-                            if (bracketEnd > bracketStart) {
-                                actorRole = h.getDescription().substring(bracketStart + 2, bracketEnd);
-                            }
-                        }
-                        items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
-                                .entityType("FAULT")
-                                .entityId(h.getFaultNumber())
-                                .action(h.getEventType())
-                                .actorName(actorName)
-                                .actorRole(actorRole)
-                                .ipAddress(h.getIpAddress())
-                                .previousValue(h.getPreviousValue())
-                                .newValue(h.getNewValue())
-                                .details(h.getTitle())
-                                .timestamp(h.getCreatedAt())
-                                .build());
-                    });
-        }
-
-        if (wantPayment) {
-            paymentApprovalRepository.findAll().stream()
-                    .filter(a -> a.getCreatedAt() != null && !a.getCreatedAt().isBefore(startDt) && !a.getCreatedAt().isAfter(endDt))
-                    .forEach(a -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
-                            .entityType("PAYMENT")
-                            .entityId(String.valueOf(a.getPaymentId()))
-                            .action(a.getAction() != null ? a.getAction().name() : null)
-                            .actorName(a.getAdminName())
-                            .actorRole(a.getAdminRole())
-                            .ipAddress(a.getIpAddress())
-                            .previousValue(a.getOriginalAmount() != null ? a.getOriginalAmount().toString() : null)
-                            .newValue(a.getAdjustedAmount() != null ? a.getAdjustedAmount().toString() : null)
-                            .details(a.getReason())
-                            .timestamp(a.getCreatedAt())
-                            .build()));
-        }
-
-        if (wantStock) {
-            stockTransactionRepository.findByDateRange(startDt, endDt)
-                    .forEach(st -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
-                            .entityType("STOCK")
-                            .entityId(st.getMaterialName())
-                            .action(st.getTransactionType() != null ? st.getTransactionType().name() : null)
-                            .actorName(st.getPerformedByName())
-                            .actorRole(st.getPerformedByRole())
-                            .ipAddress(st.getIpAddress())
-                            .previousValue(st.getStockBefore() != null ? st.getStockBefore().toString() : null)
-                            .newValue(st.getStockAfter() != null ? st.getStockAfter().toString() : null)
-                            .details(st.getReason())
-                            .timestamp(st.getCreatedAt())
-                            .build()));
-        }
-
-        if (wantUser) {
-            userAuditLogRepository.findByDateRange(startDt, endDt)
-                    .forEach(u -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
-                            .entityType("USER")
-                            .entityId(u.getTargetUserName())
-                            .action(u.getAction() != null ? u.getAction().name() : null)
-                            .actorName(u.getPerformedByName())
-                            .actorRole(u.getPerformedByRole())
-                            .ipAddress(u.getIpAddress())
-                            .previousValue(u.getPreviousValue())
-                            .newValue(u.getNewValue())
-                            .details(null)
-                            .timestamp(u.getCreatedAt())
-                            .build()));
-        }
-
-        items.sort((a, b) -> {
-            if (a.getTimestamp() == null || b.getTimestamp() == null) return 0;
-            return b.getTimestamp().compareTo(a.getTimestamp());
-        });
-
-        return ReportResponseDTO.builder()
-                .reportType(ReportRequestDTO.TYPE_AUDIT_TRAIL)
-                .reportTitle("Audit Trail Report")
-                .period(req.getPeriod())
-                .startDate(range[0].format(DATE_FMT))
-                .endDate(range[1].format(DATE_FMT))
-                .generatedAt(LocalDateTime.now())
-                .totalRecords(items.size())
-                .data(items)
-                .build();
-    }
-
     // ─── Fault Trends ─────────────────────────────────────
 
     public ReportResponseDTO getFaultTrends(
             String period,
             LocalDate startDate,
-            LocalDate endDate) {
+            LocalDate endDate,
+            Long callerOpmcId) {
         log.info("Generating fault trends report: "
                 + "period={}", period);
 
@@ -228,7 +129,10 @@ public class ReportService {
                 .build();
         LocalDate[] range = resolveDateRange(req);
 
-        List<Fault> faults = faultRepository.findAll();
+        // Stage F #2 — null callerOpmcId means unscoped (Super Admin).
+        List<Fault> faults = faultRepository.findAll().stream()
+                .filter(f -> callerOpmcId == null || callerOpmcId.equals(f.getOpmcId()))
+                .collect(Collectors.toList());
 
         // Group faults by date
         Map<String, List<Fault>> faultsByDate =
@@ -261,11 +165,12 @@ public class ReportService {
                                     ? f.getStatus()
                                     .name() : ""))
                     .count();
+            // "Open" = not yet picked up (REPORTED/ASSIGNED/HOLD) — the Fault.FaultStatus
+            // enum has no OPEN value, so this used to always be zero.
             long open = dayFaults.stream()
-                    .filter(f -> "OPEN".equals(
-                            f.getStatus() != null
-                                    ? f.getStatus()
-                                    .name() : ""))
+                    .filter(f -> f.getStatus() == Fault.FaultStatus.REPORTED
+                            || f.getStatus() == Fault.FaultStatus.ASSIGNED
+                            || f.getStatus() == Fault.FaultStatus.HOLD)
                     .count();
             long inProgress = dayFaults.stream()
                     .filter(f -> "IN_PROGRESS".equals(
@@ -280,6 +185,14 @@ public class ReportService {
                                     .name() : ""))
                     .count();
 
+            double avgResolution = dayFaults.stream()
+                    .filter(f -> f.getStatus() == Fault.FaultStatus.COMPLETED
+                            && f.getCompletedAt() != null
+                            && f.getReportedAt() != null)
+                    .mapToDouble(f -> java.time.Duration.between(
+                            f.getReportedAt(), f.getCompletedAt()).toMinutes() / 60.0)
+                    .average().orElse(0);
+
             trends.add(
                     ReportResponseDTO.FaultTrendDTO
                             .builder()
@@ -289,13 +202,14 @@ public class ReportService {
                             .inProgressFaults(inProgress)
                             .completedFaults(completed)
                             .cancelledFaults(cancelled)
-                            .avgResolutionTimeHours(2.5)
+                            .avgResolutionTimeHours(Math.round(avgResolution * 10.0) / 10.0)
                             .build());
             current = current.plusDays(1);
         }
 
-        // Summary stats
-        long totalFaults = faults.size();
+        // Summary stats — sum the already date-range-filtered trend buckets, not the
+        // unfiltered `faults` list (which would always show the grand total regardless of period).
+        long totalFaults = trends.stream().mapToLong(ReportResponseDTO.FaultTrendDTO::getTotalFaults).sum();
         List<ReportResponseDTO.SummaryStatsDTO> summary =
                 List.of(
                         ReportResponseDTO.SummaryStatsDTO
@@ -339,9 +253,18 @@ public class ReportService {
     public ReportResponseDTO getTechnicianPerformance(
             String period,
             LocalDate startDate,
-            LocalDate endDate) {
+            LocalDate endDate,
+            String technicianId,
+            Long callerOpmcId) {
         log.info("Generating technician performance report");
 
+        ReportRequestDTO dateReq = ReportRequestDTO.builder()
+                .period(period).startDate(startDate).endDate(endDate).build();
+        LocalDate[] range = resolveDateRange(dateReq);
+
+        // ANA-011 — technicianId and the date range used to be silently discarded (this method
+        // never called resolveDateRange, and the controller never passed technicianId through).
+        // Stage F #2 — callerOpmcId scopes to the caller's own OPMC; null (Super Admin) is unscoped.
         List<User> technicians = userRepository.findAll()
                 .stream()
                 .filter(u -> u.getRole() != null
@@ -349,15 +272,26 @@ public class ReportService {
                         .equals("TECHNICIAN")
                         || u.getRole().name()
                         .equals("TEAM_LEAD")))
+                .filter(u -> technicianId == null || technicianId.isBlank()
+                        || technicianId.equals(String.valueOf(u.getId())))
+                .filter(u -> callerOpmcId == null || callerOpmcId.equals(u.getOpmcId()))
                 .collect(Collectors.toList());
 
         List<ReportResponseDTO.TechnicianPerformanceDTO>
                 performances = new ArrayList<>();
 
+        List<Fault> allFaults = faultRepository.findAll();
+        Map<Long, Fault> faultsById = allFaults.stream()
+                .filter(f -> f.getId() != null)
+                .collect(Collectors.toMap(Fault::getId, f -> f, (a, b) -> a));
+
         for (User tech : technicians) {
             List<Job> jobs = jobRepository.findAll()
                     .stream()
                     .filter(j -> tech.getId().equals(j.getTechnicianId()))
+                    .filter(j -> j.getCreatedAt() != null
+                            && !j.getCreatedAt().toLocalDate().isBefore(range[0])
+                            && !j.getCreatedAt().toLocalDate().isAfter(range[1]))
                     .collect(Collectors.toList());
 
             long completed = jobs.stream()
@@ -366,9 +300,64 @@ public class ReportService {
                                     ? j.getStatus().name()
                                     : ""))
                     .count();
+            long inProgress = jobs.stream()
+                    .filter(j -> j.getStatus() == Job.JobStatus.IN_PROGRESS
+                            || j.getStatus() == Job.JobStatus.TRAVELLING
+                            || j.getStatus() == Job.JobStatus.ACCEPTED)
+                    .count();
+            long cancelled = jobs.stream()
+                    .filter(j -> j.getStatus() == Job.JobStatus.CANCELLED
+                            || j.getStatus() == Job.JobStatus.REJECTED)
+                    .count();
             long total = jobs.size();
             double completionRate = total > 0
                     ? (completed * 100.0 / total) : 0;
+
+            List<Job> completedJobs = jobs.stream()
+                    .filter(j -> j.getStatus() == Job.JobStatus.COMPLETED
+                            && j.getStartedAt() != null && j.getCompletedAt() != null)
+                    .collect(Collectors.toList());
+            double avgDuration = completedJobs.stream()
+                    .mapToDouble(j -> java.time.Duration.between(
+                            j.getStartedAt(), j.getCompletedAt()).toMinutes() / 60.0)
+                    .average().orElse(0);
+
+            List<Job> acceptedJobs = jobs.stream()
+                    .filter(j -> j.getAcceptedAt() != null && j.getCreatedAt() != null)
+                    .collect(Collectors.toList());
+            double avgResponseMinutes = acceptedJobs.stream()
+                    .mapToDouble(j -> java.time.Duration.between(
+                            j.getCreatedAt(), j.getAcceptedAt()).toMinutes())
+                    .average().orElse(0);
+
+            List<Integer> ratings = jobs.stream()
+                    .map(j -> {
+                        Fault f = faultsById.get(j.getFaultId());
+                        return f != null ? f.getCustomerRating() : null;
+                    })
+                    .filter(java.util.Objects::nonNull)
+                    .collect(Collectors.toList());
+            double satisfaction = ratings.stream()
+                    .mapToInt(Integer::intValue)
+                    .average().orElse(0);
+
+            long onTimeCompletions = completedJobs.stream()
+                    .filter(j -> {
+                        Fault f = faultsById.get(j.getFaultId());
+                        return f == null || f.getDueDate() == null
+                                || !j.getCompletedAt().isAfter(f.getDueDate());
+                    })
+                    .count();
+            double onTimeRate = !completedJobs.isEmpty()
+                    ? (onTimeCompletions * 100.0 / completedJobs.size()) : 0;
+
+            long workingDays = jobs.stream()
+                    .filter(j -> j.getCreatedAt() != null)
+                    .map(j -> j.getCreatedAt().toLocalDate())
+                    .distinct()
+                    .count();
+            double avgJobsPerDay = workingDays > 0
+                    ? (total * 1.0 / workingDays) : 0;
 
             performances.add(
                     ReportResponseDTO
@@ -379,13 +368,19 @@ public class ReportService {
                             .technicianName(
                                     tech.getFullName())
                             .phone(tech.getPhone())
+                            .opmcName(tech.getOpmcName())
                             .totalJobsAssigned(total)
                             .jobsCompleted(completed)
-                            .completionRate(completionRate)
-                            .avgJobDurationHours(2.3)
-                            .avgResponseTimeMinutes(22.0)
-                            .customerSatisfactionScore(4.5)
-                            .onTimeCompletionRate(85.0)
+                            .jobsInProgress(inProgress)
+                            .jobsCancelled(cancelled)
+                            .completionRate(Math.round(completionRate * 10.0) / 10.0)
+                            .avgJobDurationHours(Math.round(avgDuration * 10.0) / 10.0)
+                            .avgResponseTimeMinutes(Math.round(avgResponseMinutes * 10.0) / 10.0)
+                            .customerSatisfactionScore(Math.round(satisfaction * 10.0) / 10.0)
+                            .onTimeCompletions(onTimeCompletions)
+                            .onTimeCompletionRate(Math.round(onTimeRate * 10.0) / 10.0)
+                            .totalWorkingDays(workingDays)
+                            .avgJobsPerDay(Math.round(avgJobsPerDay * 10.0) / 10.0)
                             .build());
         }
 
@@ -407,11 +402,18 @@ public class ReportService {
     public ReportResponseDTO getFinancialSummary(
             String period,
             LocalDate startDate,
-            LocalDate endDate) {
+            LocalDate endDate,
+            Long callerOpmcId) {
         log.info("Generating financial summary report");
 
+        // Stage F #2 (resolved: in scope) — an Admin sees only their own OPMC's payments;
+        // opmcBreakdown below then naturally reduces to a single row for a scoped caller, which
+        // is the intended behavior — Super Admin (callerOpmcId == null) still gets the full
+        // cross-OPMC breakdown this report was built around.
         List<Payment> payments =
-                paymentRepository.findAll();
+                paymentRepository.findAll().stream()
+                        .filter(p -> callerOpmcId == null || callerOpmcId.equals(p.getOpmcId()))
+                        .collect(Collectors.toList());
 
         double totalFOC = payments.stream()
                 .mapToDouble(p ->
@@ -450,6 +452,77 @@ public class ReportService {
                 ? (approved * 100.0 / payments.size())
                 : 0;
 
+        Map<Long, Fault> faultsById = faultRepository.findAll().stream()
+                .filter(f -> f.getId() != null)
+                .collect(Collectors.toMap(Fault::getId, f -> f, (a, b) -> a));
+
+        Map<String, List<Payment>> byCategory = payments.stream()
+                .collect(Collectors.groupingBy(p -> {
+                    Fault f = p.getFaultId() != null ? faultsById.get(p.getFaultId()) : null;
+                    return f != null && f.getCategory() != null ? f.getCategory().name() : "UNKNOWN";
+                }));
+        List<ReportResponseDTO.CategoryBreakdownDTO> categoryBreakdown = byCategory.entrySet().stream()
+                .map(e -> {
+                    double amt = e.getValue().stream()
+                            .mapToDouble(p -> p.getTotalAmount() != null ? p.getTotalAmount().doubleValue() : 0)
+                            .sum();
+                    return ReportResponseDTO.CategoryBreakdownDTO.builder()
+                            .category(e.getKey())
+                            .count(e.getValue().size())
+                            .amount(amt)
+                            .percentage(totalRevenue > 0 ? Math.round(amt * 1000.0 / totalRevenue) / 10.0 : 0)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        Map<String, List<Payment>> byTechnician = payments.stream()
+                .collect(Collectors.groupingBy(p -> p.getTechnicianName() != null ? p.getTechnicianName() : "Unassigned"));
+        List<ReportResponseDTO.CategoryBreakdownDTO> technicianBreakdown = byTechnician.entrySet().stream()
+                .map(e -> {
+                    double amt = e.getValue().stream()
+                            .mapToDouble(p -> p.getTotalAmount() != null ? p.getTotalAmount().doubleValue() : 0)
+                            .sum();
+                    return ReportResponseDTO.CategoryBreakdownDTO.builder()
+                            .category(e.getKey())
+                            .count(e.getValue().size())
+                            .amount(amt)
+                            .percentage(totalRevenue > 0 ? Math.round(amt * 1000.0 / totalRevenue) / 10.0 : 0)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        Map<Long, List<Payment>> byOpmc = payments.stream()
+                .collect(Collectors.groupingBy(Payment::getOpmcId));
+        List<ReportResponseDTO.CategoryBreakdownDTO> opmcBreakdown = byOpmc.entrySet().stream()
+                .map(e -> {
+                    double amt = e.getValue().stream()
+                            .mapToDouble(p -> p.getTotalAmount() != null ? p.getTotalAmount().doubleValue() : 0)
+                            .sum();
+                    return ReportResponseDTO.CategoryBreakdownDTO.builder()
+                            .category("OPMC " + e.getKey())
+                            .count(e.getValue().size())
+                            .amount(amt)
+                            .percentage(totalRevenue > 0 ? Math.round(amt * 1000.0 / totalRevenue) / 10.0 : 0)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        List<ReportResponseDTO.RejectedPaymentDTO> rejectedPayments = payments.stream()
+                .filter(p -> p.getStatus() == Payment.PaymentStatus.NOT_APPROVED)
+                .map(p -> ReportResponseDTO.RejectedPaymentDTO.builder()
+                        .paymentNumber(p.getPaymentNumber())
+                        .technicianName(p.getTechnicianName())
+                        .amount(p.getTotalAmount() != null ? p.getTotalAmount().doubleValue() : 0)
+                        .reason(p.getRejectionReason())
+                        .rejectedAt(p.getUpdatedAt())
+                        .build())
+                .collect(Collectors.toList());
+
+        double totalMaterialCost = totalFOC + totalChargeable;
+        double totalLaborCost = payments.stream()
+                .mapToDouble(p -> p.getLabourCharge() != null ? p.getLabourCharge().doubleValue() : 0)
+                .sum();
+
         ReportResponseDTO.FinancialSummaryDTO summary =
                 ReportResponseDTO.FinancialSummaryDTO
                         .builder()
@@ -458,12 +531,18 @@ public class ReportService {
                         .totalFOCAmount(totalFOC)
                         .totalChargeableAmount(
                                 totalChargeable)
+                        .totalMaterialCost(totalMaterialCost)
+                        .totalLaborCost(totalLaborCost)
                         .totalPaymentsSubmitted(
                                 payments.size())
                         .totalPaymentsApproved(approved)
                         .totalPaymentsRejected(rejected)
                         .totalPaymentsPending(pending)
                         .approvalRate(approvalRate)
+                        .categoryBreakdown(categoryBreakdown)
+                        .technicianBreakdown(technicianBreakdown)
+                        .opmcBreakdown(opmcBreakdown)
+                        .rejectedPayments(rejectedPayments)
                         .build();
 
         List<ReportResponseDTO.SummaryStatsDTO> stats =
@@ -510,44 +589,71 @@ public class ReportService {
     public ReportResponseDTO getCustomerSatisfaction(
             String period,
             LocalDate startDate,
-            LocalDate endDate) {
+            LocalDate endDate,
+            Long callerOpmcId) {
         log.info(
                 "Generating customer satisfaction report");
 
-        // Mock satisfaction data
-        // Replace with actual rating repository
-        // when ratings feature is implemented
+        ReportRequestDTO dateReq = ReportRequestDTO.builder()
+                .period(period).startDate(startDate).endDate(endDate).build();
+        LocalDate[] range = resolveDateRange(dateReq);
+
+        // Stage F #2 — null callerOpmcId means unscoped (Super Admin).
+        List<Fault> rated = faultRepository.findAll().stream()
+                .filter(f -> f.getCustomerRating() != null
+                        && f.getCompletedAt() != null
+                        && !f.getCompletedAt().toLocalDate().isBefore(range[0])
+                        && !f.getCompletedAt().toLocalDate().isAfter(range[1]))
+                .filter(f -> callerOpmcId == null || callerOpmcId.equals(f.getOpmcId()))
+                .collect(Collectors.toList());
+
+        long r5 = rated.stream().filter(f -> f.getCustomerRating() == 5).count();
+        long r4 = rated.stream().filter(f -> f.getCustomerRating() == 4).count();
+        long r3 = rated.stream().filter(f -> f.getCustomerRating() == 3).count();
+        long r2 = rated.stream().filter(f -> f.getCustomerRating() == 2).count();
+        long r1 = rated.stream().filter(f -> f.getCustomerRating() == 1).count();
+
+        double overallScore = rated.stream()
+                .mapToInt(Fault::getCustomerRating)
+                .average().orElse(0);
+
+        double avgResolutionHours = rated.stream()
+                .filter(f -> f.getReportedAt() != null)
+                .mapToDouble(f -> java.time.Duration.between(f.getReportedAt(), f.getCompletedAt()).toMinutes() / 60.0)
+                .average().orElse(0);
+
+        long onTimeCount = rated.stream()
+                .filter(f -> f.getDueDate() == null || !f.getCompletedAt().isAfter(f.getDueDate()))
+                .count();
+        double onTimeRate = !rated.isEmpty() ? (onTimeCount * 100.0 / rated.size()) : 0;
+
+        Map<String, List<Fault>> byTech = rated.stream()
+                .filter(f -> f.getAssignedTeamLeadName() != null)
+                .collect(Collectors.groupingBy(Fault::getAssignedTeamLeadName));
+        List<ReportResponseDTO.TechnicianSatisfactionDTO> technicianScores = byTech.entrySet().stream()
+                .map(e -> ReportResponseDTO.TechnicianSatisfactionDTO.builder()
+                        .technicianName(e.getKey())
+                        .avgScore(Math.round(e.getValue().stream()
+                                .mapToInt(Fault::getCustomerRating).average().orElse(0) * 10.0) / 10.0)
+                        .totalRatings(e.getValue().size())
+                        .build())
+                .collect(Collectors.toList());
+
         ReportResponseDTO.CustomerSatisfactionDTO
                 satisfaction =
                 ReportResponseDTO.CustomerSatisfactionDTO
                         .builder()
                         .period(period)
-                        .overallScore(4.5)
-                        .totalResponses(150)
-                        .rating5Count(80)
-                        .rating4Count(40)
-                        .rating3Count(20)
-                        .rating2Count(7)
-                        .rating1Count(3)
-                        .avgResolutionTimeHours(2.8)
-                        .onTimeDeliveryRate(87.5)
-                        .technicianScores(List.of(
-                                ReportResponseDTO
-                                        .TechnicianSatisfactionDTO
-                                        .builder()
-                                        .technicianName(
-                                                "Kasun Perera")
-                                        .avgScore(4.8)
-                                        .totalRatings(30)
-                                        .build(),
-                                ReportResponseDTO
-                                        .TechnicianSatisfactionDTO
-                                        .builder()
-                                        .technicianName(
-                                                "Nimal Silva")
-                                        .avgScore(4.3)
-                                        .totalRatings(25)
-                                        .build()))
+                        .overallScore(Math.round(overallScore * 10.0) / 10.0)
+                        .totalResponses(rated.size())
+                        .rating5Count(r5)
+                        .rating4Count(r4)
+                        .rating3Count(r3)
+                        .rating2Count(r2)
+                        .rating1Count(r1)
+                        .avgResolutionTimeHours(Math.round(avgResolutionHours * 10.0) / 10.0)
+                        .onTimeDeliveryRate(Math.round(onTimeRate * 10.0) / 10.0)
+                        .technicianScores(technicianScores)
                         .build();
 
         return ReportResponseDTO.builder()
@@ -558,9 +664,785 @@ public class ReportService {
                         "Customer Satisfaction Report")
                 .period(period)
                 .generatedAt(LocalDateTime.now())
-                .totalRecords(150)
+                .totalRecords(rated.size())
                 .data(satisfaction)
                 .build();
+    }
+
+    // ─── REP-01: Daily Fault Summary ──────────────────────
+
+    public ReportResponseDTO getDailyFaultSummary(ReportRequestDTO req) {
+        log.info("Generating daily fault summary report (REP-01)");
+        LocalDate[] range = resolveDateRange(req);
+        Long callerOpmcId = req.getCallerOpmcId();
+
+        // Built early (Stage F #2) so both the Fault and Job filters below can use it — Fault
+        // carries opmcId directly, Job doesn't, so Job is scoped via technicianId -> User.opmcId.
+        Map<Long, User> usersById = userRepository.findAll().stream()
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+
+        List<Fault> faults = faultRepository.findAll().stream()
+                .filter(f -> f.getReportedAt() != null
+                        && !f.getReportedAt().toLocalDate().isBefore(range[0])
+                        && !f.getReportedAt().toLocalDate().isAfter(range[1]))
+                .filter(f -> callerOpmcId == null || callerOpmcId.equals(f.getOpmcId()))
+                .collect(Collectors.toList());
+
+        long totalFaults = faults.size();
+
+        Map<String, Long> byCategoryCount = faults.stream()
+                .collect(Collectors.groupingBy(
+                        f -> f.getCategory() != null ? f.getCategory().name() : "OTHER",
+                        Collectors.counting()));
+        List<ReportResponseDTO.CategoryBreakdownDTO> byCategory = byCategoryCount.entrySet().stream()
+                .map(e -> ReportResponseDTO.CategoryBreakdownDTO.builder()
+                        .category(e.getKey())
+                        .count(e.getValue())
+                        .percentage(totalFaults > 0 ? Math.round(e.getValue() * 1000.0 / totalFaults) / 10.0 : 0)
+                        .build())
+                .collect(Collectors.toList());
+
+        Map<String, Long> byStatusCount = faults.stream()
+                .collect(Collectors.groupingBy(
+                        f -> f.getStatus() != null ? f.getStatus().name() : "UNKNOWN",
+                        Collectors.counting()));
+        List<ReportResponseDTO.CategoryBreakdownDTO> byStatus = byStatusCount.entrySet().stream()
+                .map(e -> ReportResponseDTO.CategoryBreakdownDTO.builder()
+                        .category(e.getKey())
+                        .count(e.getValue())
+                        .percentage(totalFaults > 0 ? Math.round(e.getValue() * 1000.0 / totalFaults) / 10.0 : 0)
+                        .build())
+                .collect(Collectors.toList());
+
+        double avgResolutionTimeHours = faults.stream()
+                .filter(f -> f.getStatus() == Fault.FaultStatus.COMPLETED
+                        && f.getCompletedAt() != null && f.getReportedAt() != null)
+                .mapToDouble(f -> java.time.Duration.between(f.getReportedAt(), f.getCompletedAt()).toMinutes() / 60.0)
+                .average().orElse(0);
+
+        List<Job> jobs = jobRepository.findAll().stream()
+                .filter(j -> j.getCreatedAt() != null
+                        && !j.getCreatedAt().toLocalDate().isBefore(range[0])
+                        && !j.getCreatedAt().toLocalDate().isAfter(range[1])
+                        && j.getTechnicianId() != null)
+                .filter(j -> callerOpmcId == null
+                        || (usersById.get(j.getTechnicianId()) != null
+                            && callerOpmcId.equals(usersById.get(j.getTechnicianId()).getOpmcId())))
+                .collect(Collectors.toList());
+        Map<Long, List<Job>> jobsByTech = jobs.stream()
+                .collect(Collectors.groupingBy(Job::getTechnicianId));
+        List<ReportResponseDTO.WorkloadDTO> technicianWorkload = jobsByTech.entrySet().stream()
+                .map(e -> {
+                    User u = usersById.get(e.getKey());
+                    return ReportResponseDTO.WorkloadDTO.builder()
+                            .technicianId(e.getKey().toString())
+                            .technicianName(u != null ? u.getFullName() : "Unknown")
+                            .assignedFaults(e.getValue().size())
+                            .build();
+                })
+                .sorted((a, b) -> Long.compare(b.getAssignedFaults(), a.getAssignedFaults()))
+                .collect(Collectors.toList());
+
+        Map<String, Long> byRegionCount = faults.stream()
+                .collect(Collectors.groupingBy(
+                        f -> f.getLocationDistrict() != null ? f.getLocationDistrict() : "Unknown",
+                        Collectors.counting()));
+        List<ReportResponseDTO.GeoDistributionDTO> geoDistribution = byRegionCount.entrySet().stream()
+                .map(e -> ReportResponseDTO.GeoDistributionDTO.builder()
+                        .region(e.getKey())
+                        .faultCount(e.getValue())
+                        .build())
+                .sorted((a, b) -> Long.compare(b.getFaultCount(), a.getFaultCount()))
+                .collect(Collectors.toList());
+
+        ReportResponseDTO.DailyFaultSummaryDTO summary = ReportResponseDTO.DailyFaultSummaryDTO.builder()
+                .totalFaults(totalFaults)
+                .byCategory(byCategory)
+                .byStatus(byStatus)
+                .avgResolutionTimeHours(Math.round(avgResolutionTimeHours * 10.0) / 10.0)
+                .technicianWorkload(technicianWorkload)
+                .geographicDistribution(geoDistribution)
+                .build();
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_DAILY_FAULT_SUMMARY)
+                .reportTitle("Daily Fault Summary Report")
+                .period(req.getPeriod())
+                .startDate(range[0].format(DATE_FMT))
+                .endDate(range[1].format(DATE_FMT))
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(totalFaults)
+                .data(summary)
+                .build();
+    }
+
+    // ─── REP-03: Fault Aging ───────────────────────────────
+
+    public ReportResponseDTO getFaultAging(ReportRequestDTO req) {
+        log.info("Generating fault aging report (REP-03)");
+        Long callerOpmcId = req.getCallerOpmcId();
+
+        // Stage F #2 — null callerOpmcId means unscoped (Super Admin).
+        List<Fault> openFaults = faultRepository.findAllOpen().stream()
+                .filter(f -> callerOpmcId == null || callerOpmcId.equals(f.getOpmcId()))
+                .collect(Collectors.toList());
+        LocalDateTime now = LocalDateTime.now();
+
+        Map<Long, User> usersById = userRepository.findAll().stream()
+                .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+
+        List<ReportResponseDTO.FaultAgingItemDTO> items = openFaults.stream()
+                .filter(f -> req.getPriority() == null || req.getPriority().isBlank()
+                        || (f.getPriority() != null && f.getPriority().name().equalsIgnoreCase(req.getPriority())))
+                .map(f -> {
+                    double ageHours = f.getReportedAt() != null
+                            ? java.time.Duration.between(f.getReportedAt(), now).toMinutes() / 60.0 : 0;
+                    String bucket;
+                    if (ageHours <= 24) bucket = "0-24H";
+                    else if (ageHours <= 48) bucket = "24-48H";
+                    else if (ageHours <= 72) bucket = "48-72H";
+                    else bucket = "72H+";
+
+                    User tech = f.getAssignedTeamLeadId() != null ? usersById.get(f.getAssignedTeamLeadId()) : null;
+
+                    return ReportResponseDTO.FaultAgingItemDTO.builder()
+                            .faultId(f.getId())
+                            .faultNumber(f.getFaultNumber())
+                            .category(f.getCategory() != null ? f.getCategory().name() : null)
+                            .status(f.getStatus() != null ? f.getStatus().name() : null)
+                            .priority(f.getPriority() != null ? f.getPriority().name() : null)
+                            .ageHours(Math.round(ageHours * 10.0) / 10.0)
+                            .ageBucket(bucket)
+                            .assignedTechnician(tech != null ? tech.getFullName()
+                                    : (f.getAssignedTeamLeadName() != null ? f.getAssignedTeamLeadName() : "Unassigned"))
+                            .lastStatusUpdate(f.getUpdatedAt())
+                            .escalated(Boolean.TRUE.equals(f.getIsEscalated()))
+                            .build();
+                })
+                .sorted((a, b) -> Double.compare(b.getAgeHours(), a.getAgeHours()))
+                .collect(Collectors.toList());
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_FAULT_AGING)
+                .reportTitle("Fault Aging Report")
+                .period(req.getPeriod())
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(items.size())
+                .data(items)
+                .build();
+    }
+
+    // ─── REP-05: Material Cost Report ──────────────────────
+
+    public ReportResponseDTO getMaterialCostReport(ReportRequestDTO req) {
+        log.info("Generating material cost report (REP-05)");
+        LocalDate[] range = resolveDateRange(req);
+        LocalDateTime startDt = range[0].atStartOfDay();
+        LocalDateTime endDt = range[1].atTime(23, 59, 59);
+        Long callerOpmcId = req.getCallerOpmcId();
+
+        // Stage F #2 — MaterialUsage/StockTransaction only carry materialId, not opmcId, so
+        // scoping goes through Material.opmcId via this map. null callerOpmcId is unscoped.
+        Map<Long, Material> materialsById = materialRepository.findAll().stream()
+                .collect(Collectors.toMap(Material::getId, m -> m, (a, b) -> a));
+
+        List<MaterialUsage> usages = materialUsageRepository.findAll().stream()
+                .filter(mu -> mu.getCreatedAt() != null
+                        && !mu.getCreatedAt().isBefore(startDt) && !mu.getCreatedAt().isAfter(endDt))
+                .filter(mu -> callerOpmcId == null
+                        || (materialsById.get(mu.getMaterialId()) != null
+                            && callerOpmcId.equals(materialsById.get(mu.getMaterialId()).getOpmcId())))
+                .collect(Collectors.toList());
+
+        double totalFocCost = usages.stream()
+                .filter(mu -> mu.getChargeType() == MaterialUsage.ChargeType.FOC)
+                .mapToDouble(mu -> mu.getTotalCost() != null ? mu.getTotalCost().doubleValue() : 0)
+                .sum();
+        double totalChargeableCost = usages.stream()
+                .filter(mu -> mu.getChargeType() == MaterialUsage.ChargeType.CHARGEABLE)
+                .mapToDouble(mu -> mu.getTotalCost() != null ? mu.getTotalCost().doubleValue() : 0)
+                .sum();
+
+        Map<Long, List<MaterialUsage>> byMaterial = usages.stream()
+                .collect(Collectors.groupingBy(MaterialUsage::getMaterialId));
+        List<ReportResponseDTO.MaterialUsageSummaryDTO> mostUsedMaterials = byMaterial.entrySet().stream()
+                .map(e -> ReportResponseDTO.MaterialUsageSummaryDTO.builder()
+                        .materialId(e.getKey())
+                        .materialName(e.getValue().get(0).getMaterialName())
+                        .totalQuantity(e.getValue().stream()
+                                .mapToDouble(mu -> mu.getQuantityUsed() != null ? mu.getQuantityUsed().doubleValue() : 0)
+                                .sum())
+                        .totalCost(e.getValue().stream()
+                                .mapToDouble(mu -> mu.getTotalCost() != null ? mu.getTotalCost().doubleValue() : 0)
+                                .sum())
+                        .usageCount(e.getValue().size())
+                        .build())
+                .sorted((a, b) -> Double.compare(b.getTotalQuantity(), a.getTotalQuantity()))
+                .collect(Collectors.toList());
+
+        List<StockTransaction> damageTx = stockTransactionRepository.findByType(StockTransaction.TransactionType.DAMAGE)
+                .stream()
+                .filter(st -> st.getCreatedAt() != null
+                        && !st.getCreatedAt().isBefore(startDt) && !st.getCreatedAt().isAfter(endDt))
+                .filter(st -> callerOpmcId == null
+                        || (materialsById.get(st.getMaterialId()) != null
+                            && callerOpmcId.equals(materialsById.get(st.getMaterialId()).getOpmcId())))
+                .collect(Collectors.toList());
+        Map<Long, List<StockTransaction>> damageByMaterial = damageTx.stream()
+                .collect(Collectors.groupingBy(StockTransaction::getMaterialId));
+        List<ReportResponseDTO.MaterialUsageSummaryDTO> wastageAndDamage = damageByMaterial.entrySet().stream()
+                .map(e -> ReportResponseDTO.MaterialUsageSummaryDTO.builder()
+                        .materialId(e.getKey())
+                        .materialName(e.getValue().get(0).getMaterialName())
+                        .totalQuantity(e.getValue().stream()
+                                .mapToDouble(st -> st.getQuantity() != null ? st.getQuantity().doubleValue() : 0)
+                                .sum())
+                        .totalCost(e.getValue().stream()
+                                .mapToDouble(st -> st.getTotalCost() != null ? st.getTotalCost().doubleValue() : 0)
+                                .sum())
+                        .usageCount(e.getValue().size())
+                        .build())
+                .collect(Collectors.toList());
+
+        List<ReportResponseDTO.ReorderEstimateDTO> reorderEstimates = materialRepository.findLowStock().stream()
+                .filter(m -> callerOpmcId == null || callerOpmcId.equals(m.getOpmcId()))
+                .map(m -> ReportResponseDTO.ReorderEstimateDTO.builder()
+                        .materialId(m.getId())
+                        .materialName(m.getName())
+                        .currentStock(m.getCurrentStock() != null ? m.getCurrentStock().doubleValue() : 0)
+                        .minimumThreshold(m.getMinimumThreshold() != null ? m.getMinimumThreshold().doubleValue() : 0)
+                        .reorderQuantity(m.getReorderQuantity() != null ? m.getReorderQuantity() : 0)
+                        .estimatedCost((m.getReorderQuantity() != null ? m.getReorderQuantity() : 0)
+                                * (m.getUnitPrice() != null ? m.getUnitPrice().doubleValue() : 0))
+                        .build())
+                .collect(Collectors.toList());
+
+        ReportResponseDTO.MaterialCostReportDTO summary = ReportResponseDTO.MaterialCostReportDTO.builder()
+                .totalFocCost(totalFocCost)
+                .totalChargeableCost(totalChargeableCost)
+                .mostUsedMaterials(mostUsedMaterials)
+                .wastageAndDamage(wastageAndDamage)
+                .reorderEstimates(reorderEstimates)
+                .build();
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_MATERIAL_COST)
+                .reportTitle("Material Cost Report")
+                .period(req.getPeriod())
+                .startDate(range[0].format(DATE_FMT))
+                .endDate(range[1].format(DATE_FMT))
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(usages.size())
+                .data(summary)
+                .build();
+    }
+
+    // ─── REP-06: AI Forecast Report ────────────────────────
+
+    @SuppressWarnings("unchecked")
+    public ReportResponseDTO getAiForecastReport(ReportRequestDTO req) {
+        log.info("Generating AI forecast report (REP-06)");
+        int horizon = req.getHorizonDays() != null ? req.getHorizonDays() : 30;
+
+        ReportResponseDTO.AiForecastReportDTO summary;
+        try {
+            String url = aiBaseUrl + "/api/ai/predictions?horizon=" + horizon;
+            Map<String, Object> resp = restTemplate.getForObject(url, Map.class);
+            Map<String, Object> data = resp != null && resp.get("data") instanceof Map
+                    ? (Map<String, Object>) resp.get("data") : resp;
+
+            List<ReportResponseDTO.ForecastPointDTO> historical = toForecastPoints(
+                    (List<Map<String, Object>>) data.get("historical"), false);
+            List<ReportResponseDTO.ForecastPointDTO> forecast = toForecastPoints(
+                    (List<Map<String, Object>>) data.get("forecast"), true);
+
+            Map<String, Object> metrics = (Map<String, Object>) data.get("metrics");
+            double accuracy = metrics != null && metrics.get("accuracy") != null
+                    ? ((Number) metrics.get("accuracy")).doubleValue() : 0;
+            double mae = metrics != null && metrics.get("mae") != null
+                    ? ((Number) metrics.get("mae")).doubleValue() : 0;
+            double rmse = metrics != null && metrics.get("rmse") != null
+                    ? ((Number) metrics.get("rmse")).doubleValue() : 0;
+
+            summary = ReportResponseDTO.AiForecastReportDTO.builder()
+                    .historical(historical)
+                    .forecast(forecast)
+                    .accuracy(accuracy)
+                    .mae(mae)
+                    .rmse(rmse)
+                    .dataSource(data.get("dataSource") != null ? data.get("dataSource").toString() : "unknown")
+                    .build();
+        } catch (RestClientException e) {
+            log.warn("AI module unavailable for forecast report: {}", e.getMessage());
+            summary = ReportResponseDTO.AiForecastReportDTO.builder()
+                    .historical(List.of())
+                    .forecast(List.of())
+                    .dataSource("unavailable")
+                    .build();
+        }
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_AI_FORECAST)
+                .reportTitle("AI Fault Volume Forecast Report")
+                .period(req.getPeriod())
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(summary.getForecast().size())
+                .data(summary)
+                .build();
+    }
+
+    private List<ReportResponseDTO.ForecastPointDTO> toForecastPoints(List<Map<String, Object>> raw, boolean forecast) {
+        if (raw == null) return new ArrayList<>();
+        List<ReportResponseDTO.ForecastPointDTO> points = new ArrayList<>();
+        for (Map<String, Object> row : raw) {
+            points.add(ReportResponseDTO.ForecastPointDTO.builder()
+                    .date(row.get("ds") != null ? row.get("ds").toString() : null)
+                    .predictedFaults(numOrZero(row.get(forecast ? "yhat" : "y")))
+                    .lowerBound(numOrZero(row.get("yhat_lower")))
+                    .upperBound(numOrZero(row.get("yhat_upper")))
+                    .isForecast(forecast)
+                    .build());
+        }
+        return points;
+    }
+
+    private double numOrZero(Object v) {
+        return v instanceof Number ? ((Number) v).doubleValue() : 0;
+    }
+
+    // ─── REP-07: Geographic Demand Report ──────────────────
+
+    @SuppressWarnings("unchecked")
+    public ReportResponseDTO getGeographicDemandReport(ReportRequestDTO req) {
+        log.info("Generating geographic demand report (REP-07)");
+
+        ReportResponseDTO.GeographicDemandReportDTO summary;
+        try {
+            String url = aiBaseUrl + "/api/ai/clusters";
+            Map<String, Object> resp = restTemplate.getForObject(url, Map.class);
+            Map<String, Object> data = resp != null && resp.get("data") instanceof Map
+                    ? (Map<String, Object>) resp.get("data") : resp;
+
+            List<Map<String, Object>> rawClusters = (List<Map<String, Object>>) data.get("clusters");
+            List<ReportResponseDTO.GeoClusterDTO> clusters = new ArrayList<>();
+            if (rawClusters != null) {
+                for (Map<String, Object> c : rawClusters) {
+                    Map<String, Object> centroid = (Map<String, Object>) c.get("centroid");
+                    clusters.add(ReportResponseDTO.GeoClusterDTO.builder()
+                            .clusterId(c.get("clusterId") != null ? ((Number) c.get("clusterId")).intValue() : 0)
+                            .regionName(c.get("regionName") != null ? c.get("regionName").toString() : "Unknown")
+                            .faultCount(c.get("faultCount") != null ? ((Number) c.get("faultCount")).longValue() : 0)
+                            .riskLevel(c.get("riskLevel") != null ? c.get("riskLevel").toString() : null)
+                            .centroidLat(centroid != null ? numOrZero(centroid.get("lat")) : null)
+                            .centroidLng(centroid != null ? numOrZero(centroid.get("lng")) : null)
+                            .topCategory(c.get("topCategory") != null ? c.get("topCategory").toString() : null)
+                            .build());
+                }
+            }
+
+            summary = ReportResponseDTO.GeographicDemandReportDTO.builder()
+                    .clusters(clusters)
+                    .totalFaults(data.get("totalFaults") != null ? ((Number) data.get("totalFaults")).longValue() : 0)
+                    .dataSource(data.get("dataSource") != null ? data.get("dataSource").toString() : "unknown")
+                    .build();
+        } catch (RestClientException e) {
+            log.warn("AI module unavailable for geographic demand report: {}", e.getMessage());
+            summary = ReportResponseDTO.GeographicDemandReportDTO.builder()
+                    .clusters(List.of())
+                    .dataSource("unavailable")
+                    .build();
+        }
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_GEOGRAPHIC_DEMAND)
+                .reportTitle("Geographic Demand Report")
+                .period(req.getPeriod())
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(summary.getClusters().size())
+                .data(summary)
+                .build();
+    }
+
+    // ─── REP-08: KPI Performance Report ────────────────────
+
+    public ReportResponseDTO getKpiPerformanceReport(ReportRequestDTO req) {
+        log.info("Generating KPI performance report (REP-08)");
+        String period = req.getPeriod() != null && !req.getPeriod().isBlank() ? req.getPeriod() : "MONTHLY";
+
+        // Stage F #2 — currentUserId is null (no "is this you" concept in a report context);
+        // callerOpmcId is the real scoping value, null meaning unscoped (Super Admin).
+        List<KpiDTO.LeaderboardEntryDTO> leaderboard =
+                kpiCalculationService.getLeaderboard(period, null, req.getCallerOpmcId());
+
+        List<ReportResponseDTO.KpiReportEntryDTO> entries = leaderboard.stream()
+                .map(l -> {
+                    List<KpiDTO.TargetResponseDTO> targets =
+                            kpiCalculationService.getTechnicianTargets(l.getTechnicianId());
+                    long achieved = targets.stream()
+                            .filter(t -> "ACHIEVED".equals(t.getStatus()))
+                            .count();
+                    String badge = l.getRank() == 1 ? "GOLD" : l.getRank() == 2 ? "SILVER" : l.getRank() == 3 ? "BRONZE" : null;
+                    return ReportResponseDTO.KpiReportEntryDTO.builder()
+                            .technicianId(l.getTechnicianId().toString())
+                            .technicianName(l.getTechnicianName())
+                            .overallScore(l.getOverallScore())
+                            .starRating(l.getStarRating())
+                            .rank(l.getRank())
+                            .badge(badge)
+                            .targetsAchieved((int) achieved)
+                            .totalTargets(targets.size())
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_KPI_PERFORMANCE)
+                .reportTitle("KPI Performance Report")
+                .period(period)
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(entries.size())
+                .data(entries)
+                .build();
+    }
+
+    // ─── REP-09: Attendance Report ─────────────────────────
+
+    public ReportResponseDTO getAttendanceReport(ReportRequestDTO req) {
+        log.info("Generating attendance report (REP-09)");
+        LocalDate[] range = resolveDateRange(req);
+        LocalDateTime startDt = range[0].atStartOfDay();
+        LocalDateTime endDt = range[1].atTime(23, 59, 59);
+
+        // Stage F #2 — this filter used to trust a client-supplied opmcId request param; it now
+        // uses the caller-resolved value only (null = unscoped, Super Admin).
+        Long callerOpmcId = req.getCallerOpmcId();
+        List<User> users = userRepository.findAll().stream()
+                .filter(u -> u.getRole() != null
+                        && ("TECHNICIAN".equals(u.getRole().name()) || "TEAM_LEAD".equals(u.getRole().name())))
+                .filter(u -> callerOpmcId == null || callerOpmcId.equals(u.getOpmcId()))
+                .collect(Collectors.toList());
+
+        List<ReportResponseDTO.AttendanceReportItemDTO> items = new ArrayList<>();
+        List<ReportResponseDTO.AttendanceSummaryDTO> summaries = new ArrayList<>();
+
+        long totalDays = range[0].datesUntil(range[1].plusDays(1)).count();
+
+        for (User u : users) {
+            List<CheckInOut> records = checkInOutRepository.findByUserIdAndDateRange(u.getId(), startDt, endDt);
+            for (CheckInOut c : records) {
+                Double workingHours = null;
+                if (c.getCheckInTime() != null && c.getCheckOutTime() != null) {
+                    workingHours = java.time.Duration.between(c.getCheckInTime(), c.getCheckOutTime()).toMinutes() / 60.0;
+                }
+                items.add(ReportResponseDTO.AttendanceReportItemDTO.builder()
+                        .userId(u.getId().toString())
+                        .userName(u.getFullName())
+                        .date(c.getCheckInTime() != null ? c.getCheckInTime().toLocalDate().format(DATE_FMT) : null)
+                        .checkInTime(c.getCheckInTime())
+                        .checkInLatitude(c.getCheckInLatitude())
+                        .checkInLongitude(c.getCheckInLongitude())
+                        .checkOutTime(c.getCheckOutTime())
+                        .checkOutLatitude(c.getCheckOutLatitude())
+                        .checkOutLongitude(c.getCheckOutLongitude())
+                        .workingHours(workingHours != null ? Math.round(workingHours * 10.0) / 10.0 : null)
+                        .absent(false)
+                        .build());
+            }
+
+            long presentDays = records.stream()
+                    .map(c -> c.getCheckInTime() != null ? c.getCheckInTime().toLocalDate() : null)
+                    .filter(java.util.Objects::nonNull)
+                    .distinct()
+                    .count();
+            long absentDays = Math.max(0, totalDays - presentDays);
+            double avgWorkingHours = records.stream()
+                    .filter(c -> c.getCheckInTime() != null && c.getCheckOutTime() != null)
+                    .mapToDouble(c -> java.time.Duration.between(c.getCheckInTime(), c.getCheckOutTime()).toMinutes() / 60.0)
+                    .average().orElse(0);
+            double attendanceRate = totalDays > 0 ? (presentDays * 100.0 / totalDays) : 0;
+
+            summaries.add(ReportResponseDTO.AttendanceSummaryDTO.builder()
+                    .userId(u.getId().toString())
+                    .userName(u.getFullName())
+                    .presentDays(presentDays)
+                    .absentDays(absentDays)
+                    .attendanceRate(Math.round(attendanceRate * 10.0) / 10.0)
+                    .avgWorkingHours(Math.round(avgWorkingHours * 10.0) / 10.0)
+                    .build());
+        }
+
+        List<ReportResponseDTO.SummaryStatsDTO> summaryStats = summaries.stream()
+                .map(s -> ReportResponseDTO.SummaryStatsDTO.builder()
+                        .label(s.getUserName())
+                        .value(s.getAttendanceRate() + "%")
+                        .trend(s.getAttendanceRate() >= 90 ? "UP" : s.getAttendanceRate() >= 70 ? "STABLE" : "DOWN")
+                        .build())
+                .collect(Collectors.toList());
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_ATTENDANCE)
+                .reportTitle("Attendance Report")
+                .period(req.getPeriod())
+                .startDate(range[0].format(DATE_FMT))
+                .endDate(range[1].format(DATE_FMT))
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(items.size())
+                .summaryStats(summaryStats)
+                .data(items)
+                .build();
+    }
+
+    // ─── REP-10: Audit Trail Report ────────────────────────
+
+    public ReportResponseDTO getAuditTrailReport(ReportRequestDTO req) {
+        log.info("Generating audit trail report (REP-10)");
+        LocalDate[] range = resolveDateRange(req);
+        LocalDateTime startDt = range[0].atStartOfDay();
+        LocalDateTime endDt = range[1].atTime(23, 59, 59);
+        // Stage F #3 — same root cause as Stage F #2 (RES-023's pattern never generalized), not a
+        // separate bug: none of the four audit sources below carry opmcId directly, each is scoped
+        // through a lookup map to the entity it references. null callerOpmcId is unscoped.
+        Long callerOpmcId = req.getCallerOpmcId();
+
+        List<ReportResponseDTO.AuditTrailItemDTO> items = new ArrayList<>();
+
+        boolean wantFault = req.getEntityType() == null || req.getEntityType().isBlank()
+                || "FAULT".equalsIgnoreCase(req.getEntityType());
+        boolean wantPayment = req.getEntityType() == null || req.getEntityType().isBlank()
+                || "PAYMENT".equalsIgnoreCase(req.getEntityType());
+        boolean wantStock = req.getEntityType() == null || req.getEntityType().isBlank()
+                || "STOCK".equalsIgnoreCase(req.getEntityType());
+        boolean wantUser = req.getEntityType() == null || req.getEntityType().isBlank()
+                || "USER".equalsIgnoreCase(req.getEntityType());
+
+        if (wantFault) {
+            Map<Long, Fault> faultsById = faultRepository.findAll().stream()
+                    .filter(f -> f.getId() != null)
+                    .collect(Collectors.toMap(Fault::getId, f -> f, (a, b) -> a));
+            faultHistoryRepository.findAllRecent().stream()
+                    .filter(h -> h.getCreatedAt() != null && !h.getCreatedAt().isBefore(startDt) && !h.getCreatedAt().isAfter(endDt))
+                    .filter(h -> callerOpmcId == null
+                            || (h.getFault() != null && faultsById.get(h.getFault().getId()) != null
+                                && callerOpmcId.equals(faultsById.get(h.getFault().getId()).getOpmcId())))
+                    .forEach(h -> {
+                        // Actor identity is embedded in the description as "{name} [{role}]: {reason}"
+                        // rather than the (always-null) `actor` relation — see FaultService.writeHistory().
+                        String actorName = null;
+                        String actorRole = null;
+                        if (h.getDescription() != null && h.getDescription().contains(" [")) {
+                            int bracketStart = h.getDescription().indexOf(" [");
+                            int bracketEnd = h.getDescription().indexOf(']', bracketStart);
+                            actorName = h.getDescription().substring(0, bracketStart);
+                            if (bracketEnd > bracketStart) {
+                                actorRole = h.getDescription().substring(bracketStart + 2, bracketEnd);
+                            }
+                        }
+                        items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
+                                .entityType("FAULT")
+                                .entityId(h.getFaultNumber())
+                                .action(h.getEventType())
+                                .actorName(actorName)
+                                .actorRole(actorRole)
+                                .ipAddress(h.getIpAddress())
+                                .previousValue(h.getPreviousValue())
+                                .newValue(h.getNewValue())
+                                .details(h.getTitle())
+                                .timestamp(h.getCreatedAt())
+                                .build());
+                    });
+        }
+
+        if (wantPayment) {
+            Map<Long, Payment> paymentsById = paymentRepository.findAll().stream()
+                    .filter(p -> p.getId() != null)
+                    .collect(Collectors.toMap(Payment::getId, p -> p, (a, b) -> a));
+            paymentApprovalRepository.findAll().stream()
+                    .filter(a -> a.getCreatedAt() != null && !a.getCreatedAt().isBefore(startDt) && !a.getCreatedAt().isAfter(endDt))
+                    .filter(a -> callerOpmcId == null
+                            || (paymentsById.get(a.getPaymentId()) != null
+                                && callerOpmcId.equals(paymentsById.get(a.getPaymentId()).getOpmcId())))
+                    .forEach(a -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
+                            .entityType("PAYMENT")
+                            .entityId(String.valueOf(a.getPaymentId()))
+                            .action(a.getAction() != null ? a.getAction().name() : null)
+                            .actorName(a.getAdminName())
+                            .actorRole(a.getAdminRole())
+                            .ipAddress(a.getIpAddress())
+                            .previousValue(a.getOriginalAmount() != null ? a.getOriginalAmount().toString() : null)
+                            .newValue(a.getAdjustedAmount() != null ? a.getAdjustedAmount().toString() : null)
+                            .details(a.getReason())
+                            .timestamp(a.getCreatedAt())
+                            .build()));
+        }
+
+        if (wantStock) {
+            Map<Long, Material> materialsById = materialRepository.findAll().stream()
+                    .collect(Collectors.toMap(Material::getId, m -> m, (a, b) -> a));
+            stockTransactionRepository.findByDateRange(startDt, endDt).stream()
+                    .filter(st -> callerOpmcId == null
+                            || (materialsById.get(st.getMaterialId()) != null
+                                && callerOpmcId.equals(materialsById.get(st.getMaterialId()).getOpmcId())))
+                    .forEach(st -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
+                            .entityType("STOCK")
+                            .entityId(st.getMaterialName())
+                            .action(st.getTransactionType() != null ? st.getTransactionType().name() : null)
+                            .actorName(st.getPerformedByName())
+                            .actorRole(st.getPerformedByRole())
+                            .ipAddress(st.getIpAddress())
+                            .previousValue(st.getStockBefore() != null ? st.getStockBefore().toString() : null)
+                            .newValue(st.getStockAfter() != null ? st.getStockAfter().toString() : null)
+                            .details(st.getReason())
+                            .timestamp(st.getCreatedAt())
+                            .build()));
+        }
+
+        if (wantUser) {
+            Map<Long, User> targetUsersById = userRepository.findAll().stream()
+                    .collect(Collectors.toMap(User::getId, u -> u, (a, b) -> a));
+            userAuditLogRepository.findByDateRange(startDt, endDt).stream()
+                    .filter(u -> callerOpmcId == null
+                            || (targetUsersById.get(u.getTargetUserId()) != null
+                                && callerOpmcId.equals(targetUsersById.get(u.getTargetUserId()).getOpmcId())))
+                    .forEach(u -> items.add(ReportResponseDTO.AuditTrailItemDTO.builder()
+                            .entityType("USER")
+                            .entityId(u.getTargetUserName())
+                            .action(u.getAction() != null ? u.getAction().name() : null)
+                            .actorName(u.getPerformedByName())
+                            .actorRole(u.getPerformedByRole())
+                            .ipAddress(u.getIpAddress())
+                            .previousValue(u.getPreviousValue())
+                            .newValue(u.getNewValue())
+                            .details(null)
+                            .timestamp(u.getCreatedAt())
+                            .build()));
+        }
+
+        items.sort((a, b) -> {
+            if (a.getTimestamp() == null || b.getTimestamp() == null) return 0;
+            return b.getTimestamp().compareTo(a.getTimestamp());
+        });
+
+        return ReportResponseDTO.builder()
+                .reportType(ReportRequestDTO.TYPE_AUDIT_TRAIL)
+                .reportTitle("Audit Trail Report")
+                .period(req.getPeriod())
+                .startDate(range[0].format(DATE_FMT))
+                .endDate(range[1].format(DATE_FMT))
+                .generatedAt(LocalDateTime.now())
+                .totalRecords(items.size())
+                .data(items)
+                .build();
+    }
+
+    // ─── Report Dispatch (used by CSV/PDF/Excel export) ────
+
+    private ReportResponseDTO generateReportData(ReportRequestDTO req) {
+        switch (req.getReportType()) {
+            case ReportRequestDTO.TYPE_FAULT_TRENDS:
+                return getFaultTrends(req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getCallerOpmcId());
+            case ReportRequestDTO.TYPE_TECHNICIAN_PERFORMANCE:
+                return getTechnicianPerformance(req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getTechnicianId(), req.getCallerOpmcId());
+            case ReportRequestDTO.TYPE_FINANCIAL_SUMMARY:
+                return getFinancialSummary(req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getCallerOpmcId());
+            case ReportRequestDTO.TYPE_CUSTOMER_SATISFACTION:
+                return getCustomerSatisfaction(req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getCallerOpmcId());
+            case ReportRequestDTO.TYPE_DAILY_FAULT_SUMMARY:
+                return getDailyFaultSummary(req);
+            case ReportRequestDTO.TYPE_FAULT_AGING:
+                return getFaultAging(req);
+            case ReportRequestDTO.TYPE_MATERIAL_COST:
+                return getMaterialCostReport(req);
+            case ReportRequestDTO.TYPE_AI_FORECAST:
+                return getAiForecastReport(req);
+            case ReportRequestDTO.TYPE_GEOGRAPHIC_DEMAND:
+                return getGeographicDemandReport(req);
+            case ReportRequestDTO.TYPE_KPI_PERFORMANCE:
+                return getKpiPerformanceReport(req);
+            case ReportRequestDTO.TYPE_ATTENDANCE:
+                return getAttendanceReport(req);
+            case ReportRequestDTO.TYPE_AUDIT_TRAIL:
+                return getAuditTrailReport(req);
+            default:
+                throw new RuntimeException("Unknown report type: " + req.getReportType());
+        }
+    }
+
+    // ─── Generic row flattening (used by CSV export and by the ──
+    // ─── generic PDF/Excel table builders for the newer report types) ──
+
+    @SuppressWarnings("unchecked")
+    private List<LinkedHashMap<String, Object>> resolveDetailRows(ReportRequestDTO req, ReportResponseDTO resp) {
+        Object data = resp.getData();
+        Object rowsSource = data;
+
+        switch (req.getReportType()) {
+            case ReportRequestDTO.TYPE_DAILY_FAULT_SUMMARY:
+                rowsSource = ((ReportResponseDTO.DailyFaultSummaryDTO) data).getTechnicianWorkload();
+                break;
+            case ReportRequestDTO.TYPE_MATERIAL_COST:
+                rowsSource = ((ReportResponseDTO.MaterialCostReportDTO) data).getMostUsedMaterials();
+                break;
+            case ReportRequestDTO.TYPE_AI_FORECAST:
+                rowsSource = ((ReportResponseDTO.AiForecastReportDTO) data).getForecast();
+                break;
+            case ReportRequestDTO.TYPE_GEOGRAPHIC_DEMAND:
+                rowsSource = ((ReportResponseDTO.GeographicDemandReportDTO) data).getClusters();
+                break;
+            case ReportRequestDTO.TYPE_FINANCIAL_SUMMARY:
+                rowsSource = ((ReportResponseDTO.FinancialSummaryDTO) data).getCategoryBreakdown();
+                break;
+            case ReportRequestDTO.TYPE_CUSTOMER_SATISFACTION:
+                rowsSource = ((ReportResponseDTO.CustomerSatisfactionDTO) data).getTechnicianScores();
+                break;
+            default:
+                // Already a flat List (FAULT_TRENDS, TECHNICIAN_PERFORMANCE, FAULT_AGING,
+                // KPI_PERFORMANCE, ATTENDANCE, AUDIT_TRAIL)
+                break;
+        }
+
+        List<?> list = (rowsSource instanceof List) ? (List<?>) rowsSource
+                : (rowsSource != null ? List.of(rowsSource) : List.of());
+        List<LinkedHashMap<String, Object>> rows = new ArrayList<>();
+        for (Object o : list) {
+            rows.add(objectMapper.convertValue(o, new TypeReference<LinkedHashMap<String, Object>>() {}));
+        }
+        return rows;
+    }
+
+    // ─── Export CSV ────────────────────────────────────────
+
+    public byte[] exportCsv(ReportRequestDTO req) throws IOException {
+        log.info("Exporting CSV report: type={}", req.getReportType());
+        ReportResponseDTO resp = generateReportData(req);
+        List<LinkedHashMap<String, Object>> rows = resolveDetailRows(req, resp);
+
+        StringBuilder sb = new StringBuilder();
+        if (rows.isEmpty()) {
+            sb.append("No data available for the selected period\n");
+            return sb.toString().getBytes(StandardCharsets.UTF_8);
+        }
+
+        LinkedHashSet<String> headers = new LinkedHashSet<>();
+        for (Map<String, Object> row : rows) headers.addAll(row.keySet());
+
+        sb.append(String.join(",", headers)).append("\n");
+        for (Map<String, Object> row : rows) {
+            List<String> vals = new ArrayList<>();
+            for (String h : headers) {
+                Object v = row.get(h);
+                String s = v == null ? "" : v.toString();
+                if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+                    s = "\"" + s.replace("\"", "\"\"") + "\"";
+                }
+                vals.add(s);
+            }
+            sb.append(String.join(",", vals)).append("\n");
+        }
+        return sb.toString().getBytes(StandardCharsets.UTF_8);
     }
 
     // ─── Export PDF ───────────────────────────────────────
@@ -668,6 +1550,23 @@ public class ReportService {
                 case ReportRequestDTO
                         .TYPE_CUSTOMER_SATISFACTION:
                     addCustomerSatisfactionPdfTable(
+                            document,
+                            boldFont,
+                            regularFont,
+                            headerBgColor,
+                            lightGray,
+                            req);
+                    break;
+
+                case ReportRequestDTO.TYPE_DAILY_FAULT_SUMMARY:
+                case ReportRequestDTO.TYPE_FAULT_AGING:
+                case ReportRequestDTO.TYPE_MATERIAL_COST:
+                case ReportRequestDTO.TYPE_AI_FORECAST:
+                case ReportRequestDTO.TYPE_GEOGRAPHIC_DEMAND:
+                case ReportRequestDTO.TYPE_KPI_PERFORMANCE:
+                case ReportRequestDTO.TYPE_ATTENDANCE:
+                case ReportRequestDTO.TYPE_AUDIT_TRAIL:
+                    addGenericPdfTable(
                             document,
                             boldFont,
                             regularFont,
@@ -807,6 +1706,23 @@ public class ReportService {
                     sheet.setColumnWidth(1, 4000);
                     break;
 
+                case ReportRequestDTO.TYPE_DAILY_FAULT_SUMMARY:
+                case ReportRequestDTO.TYPE_FAULT_AGING:
+                case ReportRequestDTO.TYPE_MATERIAL_COST:
+                case ReportRequestDTO.TYPE_AI_FORECAST:
+                case ReportRequestDTO.TYPE_GEOGRAPHIC_DEMAND:
+                case ReportRequestDTO.TYPE_KPI_PERFORMANCE:
+                case ReportRequestDTO.TYPE_ATTENDANCE:
+                case ReportRequestDTO.TYPE_AUDIT_TRAIL:
+                    buildGenericSheet(
+                            sheet, rowNum,
+                            headerStyle, dataStyle,
+                            altRowStyle, req);
+                    for (int i = 0; i < 8; i++) {
+                        sheet.setColumnWidth(i, 5000);
+                    }
+                    break;
+
                 default:
                     Row noDataRow =
                             sheet.createRow(rowNum);
@@ -853,57 +1769,22 @@ public class ReportService {
                             h, boldFont, headerBg));
         }
 
-        ReportRequestDTO dateReq =
-                ReportRequestDTO.builder()
-                        .period(req.getPeriod())
-                        .startDate(req.getStartDate())
-                        .endDate(req.getEndDate())
-                        .build();
-        LocalDate[] range = resolveDateRange(dateReq);
+        @SuppressWarnings("unchecked")
+        List<ReportResponseDTO.FaultTrendDTO> trends =
+                (List<ReportResponseDTO.FaultTrendDTO>) getFaultTrends(
+                        req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getCallerOpmcId()).getData();
 
-        List<Fault> faults = faultRepository.findAll();
-        LocalDate current = range[0];
         boolean alternate = false;
-
-        while (!current.isAfter(range[1])) {
-            String dateKey =
-                    current.format(DATE_FMT);
-            final LocalDate finalCurrent = current;
-
-            List<Fault> dayFaults = faults.stream()
-                    .filter(f -> f.getCreatedAt() != null
-                            && f.getCreatedAt()
-                            .toLocalDate()
-                            .equals(finalCurrent))
-                    .collect(Collectors.toList());
-
-            DeviceRgb bg = alternate
-                    ? lightGray : null;
+        for (ReportResponseDTO.FaultTrendDTO t : trends) {
+            DeviceRgb bg = alternate ? lightGray : null;
             String[] row = {
-                    dateKey,
-                    String.valueOf(dayFaults.size()),
-                    String.valueOf(dayFaults.stream()
-                            .filter(f ->
-                                    "OPEN".equals(
-                                            f.getStatus() != null
-                                                    ? f.getStatus().name()
-                                                    : ""))
-                            .count()),
-                    String.valueOf(dayFaults.stream()
-                            .filter(f ->
-                                    "IN_PROGRESS".equals(
-                                            f.getStatus() != null
-                                                    ? f.getStatus().name()
-                                                    : ""))
-                            .count()),
-                    String.valueOf(dayFaults.stream()
-                            .filter(f ->
-                                    "COMPLETED".equals(
-                                            f.getStatus() != null
-                                                    ? f.getStatus().name()
-                                                    : ""))
-                            .count()),
-                    "2.5"
+                    t.getDate(),
+                    String.valueOf(t.getTotalFaults()),
+                    String.valueOf(t.getOpenFaults()),
+                    String.valueOf(t.getInProgressFaults()),
+                    String.valueOf(t.getCompletedFaults()),
+                    String.format("%.1f", t.getAvgResolutionTimeHours())
             };
 
             for (String val : row) {
@@ -911,7 +1792,6 @@ public class ReportService {
                         val, regularFont, bg));
             }
             alternate = !alternate;
-            current = current.plusDays(1);
         }
 
         document.add(table);
@@ -941,42 +1821,26 @@ public class ReportService {
                             h, boldFont, headerBg));
         }
 
-        List<User> technicians =
-                userRepository.findAll().stream()
-                        .filter(u -> u.getRole() != null
-                                && (u.getRole().name()
-                                .equals("TECHNICIAN")
-                                || u.getRole().name()
-                                .equals("TEAM_LEAD")))
-                        .collect(Collectors.toList());
+        @SuppressWarnings("unchecked")
+        List<ReportResponseDTO.TechnicianPerformanceDTO> performances =
+                (List<ReportResponseDTO.TechnicianPerformanceDTO>) getTechnicianPerformance(
+                        req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getTechnicianId(), req.getCallerOpmcId()).getData();
 
         boolean alternate = false;
-        for (User tech : technicians) {
-            List<Job> jobs =
-                    jobRepository.findAll().stream()
-                            .filter(j -> tech.getId().equals(j.getTechnicianId()))
-                            .collect(Collectors.toList());
-
-            long completed = jobs.stream()
-                    .filter(j -> "COMPLETED".equals(
-                            j.getStatus() != null
-                                    ? j.getStatus().name()
-                                    : ""))
-                    .count();
-            double rate = jobs.size() > 0
-                    ? (completed * 100.0 / jobs.size())
-                    : 0;
-
+        for (ReportResponseDTO.TechnicianPerformanceDTO p : performances) {
             DeviceRgb bg = alternate
                     ? lightGray : null;
             String[] row = {
-                    tech.getFullName(),
-                    tech.getPhone() != null
-                            ? tech.getPhone() : "N/A",
-                    String.valueOf(jobs.size()),
-                    String.valueOf(completed),
-                    String.format("%.1f%%", rate),
-                    "4.5 ★"
+                    p.getTechnicianName(),
+                    p.getPhone() != null
+                            ? p.getPhone() : "N/A",
+                    String.valueOf(p.getTotalJobsAssigned()),
+                    String.valueOf(p.getJobsCompleted()),
+                    String.format("%.1f%%", p.getCompletionRate()),
+                    p.getCustomerSatisfactionScore() > 0
+                            ? String.format("%.1f ★", p.getCustomerSatisfactionScore())
+                            : "N/A"
             };
 
             for (String val : row) {
@@ -1093,14 +1957,21 @@ public class ReportService {
         table.addHeaderCell(createPdfHeaderCell(
                 "Value", boldFont, headerBg));
 
+        ReportResponseDTO.CustomerSatisfactionDTO cs =
+                (ReportResponseDTO.CustomerSatisfactionDTO) getCustomerSatisfaction(
+                        req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getCallerOpmcId()).getData();
+        long totalResp = cs.getTotalResponses();
         String[][] rows = {
-                {"Overall Score", "4.5 / 5.0 ★"},
-                {"Total Responses", "150"},
-                {"5 Star Ratings", "80 (53.3%)"},
-                {"4 Star Ratings", "40 (26.7%)"},
-                {"3 Star Ratings", "20 (13.3%)"},
-                {"Avg Resolution Time", "2.8 hours"},
-                {"On-Time Delivery", "87.5%"},
+                {"Overall Score", String.format("%.1f / 5.0 ★", cs.getOverallScore())},
+                {"Total Responses", String.valueOf(totalResp)},
+                {"5 Star Ratings", cs.getRating5Count() + pct(cs.getRating5Count(), totalResp)},
+                {"4 Star Ratings", cs.getRating4Count() + pct(cs.getRating4Count(), totalResp)},
+                {"3 Star Ratings", cs.getRating3Count() + pct(cs.getRating3Count(), totalResp)},
+                {"2 Star Ratings", cs.getRating2Count() + pct(cs.getRating2Count(), totalResp)},
+                {"1 Star Ratings", cs.getRating1Count() + pct(cs.getRating1Count(), totalResp)},
+                {"Avg Resolution Time", String.format("%.1f hours", cs.getAvgResolutionTimeHours())},
+                {"On-Time Delivery", String.format("%.1f%%", cs.getOnTimeDeliveryRate())},
         };
 
         boolean alternate = false;
@@ -1111,6 +1982,51 @@ public class ReportService {
                     row[0], boldFont, bg));
             table.addCell(createPdfDataCell(
                     row[1], regularFont, bg));
+            alternate = !alternate;
+        }
+
+        document.add(table);
+    }
+
+    /**
+     * Generic table renderer used by the newer report types (REP-01, 03, 05-10) —
+     * builds headers from the keys of the first flattened row instead of a
+     * bespoke per-type layout like the original four report builders above.
+     */
+    private void addGenericPdfTable(
+            Document document,
+            PdfFont boldFont,
+            PdfFont regularFont,
+            DeviceRgb headerBg,
+            DeviceRgb lightGray,
+            ReportRequestDTO req) throws IOException {
+
+        ReportResponseDTO resp = generateReportData(req);
+        List<LinkedHashMap<String, Object>> rows = resolveDetailRows(req, resp);
+
+        if (rows.isEmpty()) {
+            document.add(new Paragraph("No data available for the selected period")
+                    .setFont(regularFont));
+            return;
+        }
+
+        List<String> headers = new ArrayList<>(rows.get(0).keySet());
+        float[] colWidths = new float[headers.size()];
+        Arrays.fill(colWidths, 1f);
+        Table table = new Table(UnitValue.createPercentArray(colWidths))
+                .useAllAvailableWidth();
+
+        for (String h : headers) {
+            table.addHeaderCell(createPdfHeaderCell(h, boldFont, headerBg));
+        }
+
+        boolean alternate = false;
+        for (Map<String, Object> row : rows) {
+            DeviceRgb bg = alternate ? lightGray : null;
+            for (String h : headers) {
+                Object v = row.get(h);
+                table.addCell(createPdfDataCell(v == null ? "" : v.toString(), regularFont, bg));
+            }
             alternate = !alternate;
         }
 
@@ -1137,63 +2053,29 @@ public class ReportService {
             cell.setCellStyle(headerStyle);
         }
 
-        List<Fault> faults = faultRepository.findAll();
-        LocalDate[] range = resolveDateRange(req);
-        LocalDate current = range[0];
+        @SuppressWarnings("unchecked")
+        List<ReportResponseDTO.FaultTrendDTO> trends =
+                (List<ReportResponseDTO.FaultTrendDTO>) getFaultTrends(
+                        req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getCallerOpmcId()).getData();
         boolean alternate = false;
 
-        while (!current.isAfter(range[1])) {
-            final LocalDate finalDate = current;
-            List<Fault> dayFaults = faults.stream()
-                    .filter(f ->
-                            f.getCreatedAt() != null
-                                    && f.getCreatedAt()
-                                    .toLocalDate()
-                                    .equals(finalDate))
-                    .collect(Collectors.toList());
-
+        for (ReportResponseDTO.FaultTrendDTO t : trends) {
             Row row = sheet.createRow(startRow++);
             CellStyle style = alternate
                     ? altRowStyle : dataStyle;
 
-            row.createCell(0).setCellValue(
-                    finalDate.format(DATE_FMT));
-            row.createCell(1).setCellValue(
-                    dayFaults.size());
-            row.createCell(2).setCellValue(
-                    dayFaults.stream()
-                            .filter(f -> "OPEN"
-                                    .equals(f.getStatus()
-                                            != null
-                                            ? f.getStatus()
-                                            .name()
-                                            : ""))
-                            .count());
-            row.createCell(3).setCellValue(
-                    dayFaults.stream()
-                            .filter(f -> "IN_PROGRESS"
-                                    .equals(f.getStatus()
-                                            != null
-                                            ? f.getStatus()
-                                            .name()
-                                            : ""))
-                            .count());
-            row.createCell(4).setCellValue(
-                    dayFaults.stream()
-                            .filter(f -> "COMPLETED"
-                                    .equals(f.getStatus()
-                                            != null
-                                            ? f.getStatus()
-                                            .name()
-                                            : ""))
-                            .count());
-            row.createCell(5).setCellValue(2.5);
+            row.createCell(0).setCellValue(t.getDate());
+            row.createCell(1).setCellValue(t.getTotalFaults());
+            row.createCell(2).setCellValue(t.getOpenFaults());
+            row.createCell(3).setCellValue(t.getInProgressFaults());
+            row.createCell(4).setCellValue(t.getCompletedFaults());
+            row.createCell(5).setCellValue(t.getAvgResolutionTimeHours());
 
             for (int i = 0; i < 6; i++) {
                 row.getCell(i).setCellStyle(style);
             }
             alternate = !alternate;
-            current = current.plusDays(1);
         }
     }
 
@@ -1218,54 +2100,28 @@ public class ReportService {
             cell.setCellStyle(headerStyle);
         }
 
-        List<User> technicians =
-                userRepository.findAll().stream()
-                        .filter(u ->
-                                u.getRole() != null
-                                        && (u.getRole()
-                                        .name()
-                                        .equals(
-                                                "TECHNICIAN")
-                                        || u.getRole()
-                                        .name()
-                                        .equals(
-                                                "TEAM_LEAD")))
-                        .collect(Collectors.toList());
+        @SuppressWarnings("unchecked")
+        List<ReportResponseDTO.TechnicianPerformanceDTO> performances =
+                (List<ReportResponseDTO.TechnicianPerformanceDTO>) getTechnicianPerformance(
+                        req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getTechnicianId(), req.getCallerOpmcId()).getData();
 
         boolean alternate = false;
-        for (User tech : technicians) {
-            List<Job> jobs =
-                    jobRepository.findAll().stream()
-                            .filter(j -> tech.getId().equals(j.getTechnicianId()))
-                            .collect(Collectors.toList());
-
-            long completed = jobs.stream()
-                    .filter(j -> "COMPLETED"
-                            .equals(j.getStatus() != null
-                                    ? j.getStatus().name()
-                                    : ""))
-                    .count();
-            double rate = jobs.size() > 0
-                    ? (completed * 100.0 / jobs.size())
-                    : 0;
-
+        for (ReportResponseDTO.TechnicianPerformanceDTO p : performances) {
             Row row = sheet.createRow(startRow++);
             CellStyle style = alternate
                     ? altRowStyle : dataStyle;
 
-            row.createCell(0).setCellValue(
-                    tech.getFullName());
+            row.createCell(0).setCellValue(p.getTechnicianName());
             row.createCell(1).setCellValue(
-                    tech.getPhone() != null
-                            ? tech.getPhone() : "N/A");
-            row.createCell(2).setCellValue(jobs.size());
-            row.createCell(3).setCellValue(completed);
-            row.createCell(4).setCellValue(
-                    Math.round(rate * 10.0) / 10.0);
-            row.createCell(5).setCellValue(2.3);
-            row.createCell(6).setCellValue(22.0);
-            row.createCell(7).setCellValue(4.5);
-            row.createCell(8).setCellValue(85.0);
+                    p.getPhone() != null ? p.getPhone() : "N/A");
+            row.createCell(2).setCellValue(p.getTotalJobsAssigned());
+            row.createCell(3).setCellValue(p.getJobsCompleted());
+            row.createCell(4).setCellValue(p.getCompletionRate());
+            row.createCell(5).setCellValue(p.getAvgJobDurationHours());
+            row.createCell(6).setCellValue(p.getAvgResponseTimeMinutes());
+            row.createCell(7).setCellValue(p.getCustomerSatisfactionScore());
+            row.createCell(8).setCellValue(p.getOnTimeCompletionRate());
 
             for (int i = 0; i < 9; i++) {
                 if (row.getCell(i) != null) {
@@ -1352,29 +2208,78 @@ public class ReportService {
         h1.setCellValue("Value");
         h1.setCellStyle(headerStyle);
 
-        String[][] rows = {
-                {"Overall Score", "4.5 / 5.0"},
-                {"Total Responses", "150"},
-                {"5 Star", "80"},
-                {"4 Star", "40"},
-                {"3 Star", "20"},
-                {"2 Star", "7"},
-                {"1 Star", "3"},
-                {"Avg Resolution (hrs)", "2.8"},
-                {"On-Time Delivery %", "87.5"},
+        ReportResponseDTO.CustomerSatisfactionDTO cs =
+                (ReportResponseDTO.CustomerSatisfactionDTO) getCustomerSatisfaction(
+                        req.getPeriod(), req.getStartDate(), req.getEndDate(),
+                        req.getCallerOpmcId()).getData();
+        Object[][] rows = {
+                {"Overall Score", cs.getOverallScore()},
+                {"Total Responses", (double) cs.getTotalResponses()},
+                {"5 Star", (double) cs.getRating5Count()},
+                {"4 Star", (double) cs.getRating4Count()},
+                {"3 Star", (double) cs.getRating3Count()},
+                {"2 Star", (double) cs.getRating2Count()},
+                {"1 Star", (double) cs.getRating1Count()},
+                {"Avg Resolution (hrs)", cs.getAvgResolutionTimeHours()},
+                {"On-Time Delivery %", cs.getOnTimeDeliveryRate()},
         };
 
         boolean alternate = false;
-        for (String[] rowData : rows) {
+        for (Object[] rowData : rows) {
             Row row = sheet.createRow(startRow++);
             CellStyle style = alternate
                     ? altRowStyle : dataStyle;
             Cell c0 = row.createCell(0);
-            c0.setCellValue(rowData[0]);
+            c0.setCellValue((String) rowData[0]);
             c0.setCellStyle(style);
             Cell c1 = row.createCell(1);
-            c1.setCellValue(rowData[1]);
+            c1.setCellValue((Double) rowData[1]);
             c1.setCellStyle(style);
+            alternate = !alternate;
+        }
+    }
+
+    /** Generic sheet renderer for the newer report types — mirrors addGenericPdfTable(). */
+    private void buildGenericSheet(
+            Sheet sheet, int startRow,
+            CellStyle headerStyle,
+            CellStyle dataStyle,
+            CellStyle altRowStyle,
+            ReportRequestDTO req) {
+
+        ReportResponseDTO resp = generateReportData(req);
+        List<LinkedHashMap<String, Object>> rows = resolveDetailRows(req, resp);
+
+        if (rows.isEmpty()) {
+            Row noDataRow = sheet.createRow(startRow);
+            noDataRow.createCell(0).setCellValue("No data available for the selected period");
+            return;
+        }
+
+        List<String> headers = new ArrayList<>(rows.get(0).keySet());
+        Row headerRow = sheet.createRow(startRow++);
+        for (int i = 0; i < headers.size(); i++) {
+            Cell cell = headerRow.createCell(i);
+            cell.setCellValue(headers.get(i));
+            cell.setCellStyle(headerStyle);
+        }
+
+        boolean alternate = false;
+        for (Map<String, Object> rowData : rows) {
+            Row row = sheet.createRow(startRow++);
+            CellStyle style = alternate ? altRowStyle : dataStyle;
+            for (int i = 0; i < headers.size(); i++) {
+                Object v = rowData.get(headers.get(i));
+                Cell cell = row.createCell(i);
+                if (v instanceof Number) {
+                    cell.setCellValue(((Number) v).doubleValue());
+                } else if (v instanceof Boolean) {
+                    cell.setCellValue((Boolean) v);
+                } else {
+                    cell.setCellValue(v == null ? "" : v.toString());
+                }
+                cell.setCellStyle(style);
+            }
             alternate = !alternate;
         }
     }
@@ -1490,6 +2395,10 @@ public class ReportService {
 
     // ─── Utility ──────────────────────────────────────────
 
+    private String pct(long count, long total) {
+        return total > 0 ? String.format(" (%.1f%%)", count * 100.0 / total) : " (0.0%)";
+    }
+
     private String getReportTitle(String reportType) {
         switch (reportType) {
             case ReportRequestDTO.TYPE_FAULT_TRENDS:
@@ -1503,6 +2412,22 @@ public class ReportService {
             case ReportRequestDTO
                     .TYPE_CUSTOMER_SATISFACTION:
                 return "Customer Satisfaction Report";
+            case ReportRequestDTO.TYPE_DAILY_FAULT_SUMMARY:
+                return "Daily Fault Summary Report";
+            case ReportRequestDTO.TYPE_FAULT_AGING:
+                return "Fault Aging Report";
+            case ReportRequestDTO.TYPE_MATERIAL_COST:
+                return "Material Cost Report";
+            case ReportRequestDTO.TYPE_AI_FORECAST:
+                return "AI Fault Volume Forecast Report";
+            case ReportRequestDTO.TYPE_GEOGRAPHIC_DEMAND:
+                return "Geographic Demand Report";
+            case ReportRequestDTO.TYPE_KPI_PERFORMANCE:
+                return "KPI Performance Report";
+            case ReportRequestDTO.TYPE_ATTENDANCE:
+                return "Attendance Report";
+            case ReportRequestDTO.TYPE_AUDIT_TRAIL:
+                return "Audit Trail Report";
             default:
                 return "SLT Report";
         }

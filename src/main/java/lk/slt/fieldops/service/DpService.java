@@ -72,7 +72,7 @@ public class DpService {
      */
     @Transactional(readOnly = true)
     public List<DpDTO> getAll(Long opmcFilter, boolean activeOnly) {
-        List<Dp> base = activeOnly ? dpRepo.findByIsActiveTrue() : dpRepo.findAll();
+        List<Dp> base = activeOnly ? dpRepo.findActiveWithFullChain() : dpRepo.findAllWithFullChain();
         return base.stream()
             .filter(dp -> opmcFilter == null || opmcFilter.equals(opmcIdOf(dp)))
             .map(this::mapToDTO).collect(Collectors.toList());
@@ -100,7 +100,7 @@ public class DpService {
      */
     @Transactional(readOnly = true)
     public List<DpDTO> getByCab(Long cabId, Long opmcFilter, boolean activeOnly) {
-        return dpRepo.findByCabId(cabId).stream()
+        return dpRepo.findByCabIdWithFullChain(cabId).stream()
             .filter(dp -> opmcFilter == null || opmcFilter.equals(opmcIdOf(dp)))
             .filter(dp -> !activeOnly || Boolean.TRUE.equals(dp.getIsActive()))
             .map(this::mapToDTO).collect(Collectors.toList());

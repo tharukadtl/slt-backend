@@ -10,7 +10,7 @@ import java.math.BigDecimal;
  *   "name":             "Cat6 Ethernet Cable",
  *   "sku":              "CAB-CAT6-001",
  *   "categoryId":       2,
- *   "branchId":         1,
+ *   "opmcId":           1,
  *   "chargeType":       "FOC",
  *   "unitPrice":        0,
  *   "unit":             "meters",
@@ -31,8 +31,8 @@ public class CreateMaterialRequest {
     @NotNull(message = "Category ID is required")
     private Long categoryId;
 
-    @NotNull(message = "Branch ID is required")
-    private Long branchId;
+    @NotNull(message = "OPMC ID is required")
+    private Long opmcId;
 
     private String chargeType = "FOC";    // FOC or CHARGEABLE
 
@@ -50,7 +50,7 @@ public class CreateMaterialRequest {
     public String     getSku()              { return sku; }
     public String     getDescription()      { return description; }
     public Long       getCategoryId()       { return categoryId; }
-    public Long       getBranchId()         { return branchId; }
+    public Long       getOpmcId()           { return opmcId; }
     public String     getChargeType()       { return chargeType; }
     public BigDecimal getUnitPrice()        { return unitPrice; }
     public String     getUnit()             { return unit; }
@@ -61,7 +61,7 @@ public class CreateMaterialRequest {
     public void setSku(String v)               { this.sku              = v; }
     public void setDescription(String v)       { this.description      = v; }
     public void setCategoryId(Long v)          { this.categoryId       = v; }
-    public void setBranchId(Long v)            { this.branchId         = v; }
+    public void setOpmcId(Long v)              { this.opmcId           = v; }
     public void setChargeType(String v)        { this.chargeType       = v; }
     public void setUnitPrice(BigDecimal v)     { this.unitPrice        = v; }
     public void setUnit(String v)              { this.unit             = v; }

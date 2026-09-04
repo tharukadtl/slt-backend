@@ -19,7 +19,7 @@ public class JwtTokenProvider {
     @Value("${app.jwt.access-token-expiry-ms}")
     private long accessTokenExpiryMs;
 
-    public String createAccessToken(Long userId, String username, String role, Long branchId) {
+    public String createAccessToken(Long userId, String username, String role, Long opmcId) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + accessTokenExpiryMs);
 
@@ -27,7 +27,7 @@ public class JwtTokenProvider {
                 .subject(String.valueOf(userId))
                 .claim("username", username)
                 .claim("role", role)
-                .claim("branchId", branchId)
+                .claim("opmcId", opmcId)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())

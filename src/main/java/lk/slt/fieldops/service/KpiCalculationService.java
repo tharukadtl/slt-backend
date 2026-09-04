@@ -32,6 +32,8 @@ public class KpiCalculationService {
             kpiScoreRepository;
     private final CheckInOutRepository
             checkInOutRepository;
+    private final FaultRepository
+            faultRepository;
 
     private static final DateTimeFormatter
             DATE_FMT =
@@ -72,23 +74,51 @@ public class KpiCalculationService {
                 getDateRange(period);
         LocalDate startDate = range[0];
         LocalDate endDate = range[1];
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.atTime(23, 59, 59);
 
-        // ── Fetch all jobs ──────────────────────
-        List<Job> allJobs =
-                jobRepository.findAll().stream()
-                        .filter(j -> userId.equals(j.getTechnicianId()))
-                        .collect(Collectors.toList());
+        // QA_Compliance_Consolidated_Report.md — these four used to be findAll().stream()
+        // full-table scans filtered in memory (jobs, payments) or were re-queried once per
+        // team member from getTeamKpi (all four). Now query-level filtered and, when called
+        // from getTeamKpi, batch-fetched once for the whole team — see computePersonalKpi.
+        List<Job> periodJobs = jobRepository
+                .findByTechnicianIdAndCreatedAtBetween(userId, startDateTime, endDateTime);
+        List<Payment> teamLeadPayments = paymentRepository
+                .findByTeamLeadIdAndCreatedAtBetween(userId, startDateTime, endDateTime);
+        List<CheckInOut> attendanceRecords = checkInOutRepository
+                .findByUserIdAndDateRange(userId, startDateTime, endDateTime);
+        List<KpiTarget> targets = kpiTargetRepository
+                .findActiveByUserIdAndPeriod(userId, period);
 
-        List<Job> periodJobs = allJobs.stream()
-                .filter(j ->
-                        j.getCreatedAt() != null
-                                && !j.getCreatedAt()
-                                .toLocalDate()
-                                .isBefore(startDate)
-                                && !j.getCreatedAt()
-                                .toLocalDate()
-                                .isAfter(endDate))
+        // QA_Compliance_Consolidated_Report.md #2 — satisfaction is derived from real
+        // Fault.customerRating values, not hardcoded. One batched lookup by the fault ids this
+        // user's own periodJobs reference, same shape as the other four batched queries above.
+        List<Long> faultIds = periodJobs.stream()
+                .map(Job::getFaultId)
+                .filter(Objects::nonNull)
+                .distinct()
                 .collect(Collectors.toList());
+        List<Fault> periodFaults = faultIds.isEmpty()
+                ? List.of()
+                : faultRepository.findAllById(faultIds);
+
+        return computePersonalKpi(user, period, startDate, endDate,
+                periodJobs, teamLeadPayments, attendanceRecords, targets, periodFaults);
+    }
+
+    /**
+     * The actual per-person calculation, extracted so {@link #getTeamKpi} can call it once per
+     * member against pre-fetched, already-grouped lists instead of each member triggering its
+     * own {@code getPersonalKpi} (and therefore its own set of queries). {@link #getPersonalKpi}
+     * itself is just this method plus the single-user queries that feed it.
+     */
+    private KpiDTO.PersonalKpiDTO computePersonalKpi(
+            User user, String period, LocalDate startDate, LocalDate endDate,
+            List<Job> periodJobs, List<Payment> teamLeadPayments,
+            List<CheckInOut> attendanceRecords, List<KpiTarget> targets,
+            List<Fault> periodFaults) {
+
+        Long userId = user.getId();
 
         // ── Core metrics ────────────────────────
         long totalJobs = periodJobs.size();
@@ -122,22 +152,17 @@ public class KpiCalculationService {
                 : 0;
 
         // ── Revenue ─────────────────────────────
-        double revenue = paymentRepository
-                .findAll().stream()
+        // teamLeadPayments is already scoped to this user's teamLeadId + the period's date
+        // range by the caller's query — only the status check remains in memory here, unchanged
+        // from before (see PaymentRepository's own comment: "APPROVED" is not a real
+        // PaymentStatus constant, a separate pre-existing bug this fix deliberately preserves
+        // rather than silently fixing).
+        double revenue = teamLeadPayments.stream()
                 .filter(p ->
-                        userId.equals(p.getTeamLeadId())
-                                && p.getStatus() != null
+                        p.getStatus() != null
                                 && "APPROVED"
                                 .equals(p.getStatus()
-                                        .name())
-                                && p.getCreatedAt()
-                                != null
-                                && !p.getCreatedAt()
-                                .toLocalDate()
-                                .isBefore(startDate)
-                                && !p.getCreatedAt()
-                                .toLocalDate()
-                                .isAfter(endDate))
+                                        .name()))
                 .mapToDouble(p ->
                         p.getTotalAmount() != null
                                 ? p.getTotalAmount().doubleValue()
@@ -145,18 +170,9 @@ public class KpiCalculationService {
                 .sum();
 
         // ── Attendance ──────────────────────────
-        LocalDateTime startDateTime =
-                startDate.atStartOfDay();
-        LocalDateTime endDateTime =
-                endDate.atTime(23, 59, 59);
-
-        List<CheckInOut> attendanceRecords =
-                checkInOutRepository
-                        .findByUserIdAndDateRange(
-                                userId,
-                                startDateTime,
-                                endDateTime);
-
+        // attendanceRecords is already fetched for this user + the period's date range by the
+        // caller (getPersonalKpi's own query, or getTeamKpi's single batched query for the
+        // whole team).
         int presentDays =
                 attendanceRecords.size();
         long totalWorkMinutes =
@@ -194,17 +210,61 @@ public class KpiCalculationService {
                         100.0)
                         : 0;
 
-        // ── Mock satisfaction scores ─────────────
-        // Replace with actual rating data
-        // when implemented
-        double satisfaction = 4.5;
+        // ── Satisfaction ──────────────────────────
+        // QA_Compliance_Consolidated_Report.md #2 — real average of Fault.customerRating (1-5)
+        // across this technician's own COMPLETED jobs in the period, not a hardcoded constant.
+        // NOTE: as of this fix, customerRating has no write path anywhere in the product (no
+        // controller endpoint, no mobile screen, ever calls Fault.setCustomerRating) — verified
+        // by project-wide search across fieldops and SLTMobileApp. Every fault's rating is
+        // therefore currently null, so this genuinely averages to 0 today, matching the same
+        // no-ratings-yet convention ReportService.buildSatisfactionReport already uses
+        // (`.average().orElse(0)`) rather than inventing a different default. This is an honest
+        // reflection of real (absent) data, not a bug — it will start reflecting real scores the
+        // moment a rating-capture path is built; it does not fabricate positivity the way the
+        // previous hardcoded 4.5 did.
+        Set<Long> completedFaultIds = periodJobs.stream()
+                .filter(j ->
+                        j.getStatus() != null
+                                && "COMPLETED"
+                                .equals(j.getStatus().name()))
+                .map(Job::getFaultId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        double satisfaction = completedFaultIds.isEmpty()
+                ? 0
+                : periodFaults.stream()
+                        .filter(f ->
+                                completedFaultIds.contains(f.getId())
+                                        && f.getCustomerRating() != null)
+                        .mapToInt(Fault::getCustomerRating)
+                        .average()
+                        .orElse(0);
+
         double onTimeRate = completionRate > 0
                 ? Math.min(
                 completionRate * 0.9, 100)
                 : 0;
         double avgDuration = totalJobs > 0
                 ? 2.3 : 0;
-        double avgResponseTime = 22.0;
+
+        // ── Response time ─────────────────────────
+        // QA_Compliance_Consolidated_Report.md #2 — real average of minutes between a job's
+        // creation (Job.createdAt, stamped the instant JobService.createJob dispatches a Fault
+        // to this technician — see JobService.java:401-421) and the technician's first action on
+        // it (Job.acceptedAt, stamped once by JobService.updateStatus on the ACCEPTED
+        // transition) — not a hardcoded constant. Scoped to this technician's own periodJobs;
+        // jobs never yet accepted (still PENDING, or handed back at EOD before acceptance)
+        // contribute no data point rather than a fabricated one.
+        double avgResponseTime = periodJobs.stream()
+                .filter(j ->
+                        j.getCreatedAt() != null
+                                && j.getAcceptedAt() != null)
+                .mapToLong(j ->
+                        Math.max(0,
+                                java.time.temporal.ChronoUnit.MINUTES
+                                        .between(j.getCreatedAt(), j.getAcceptedAt())))
+                .average()
+                .orElse(0);
 
         // ── Calculate overall score ──────────────
         double overallScore =
@@ -220,14 +280,11 @@ public class KpiCalculationService {
         String perfColor =
                 getPerformanceColor(overallScore);
         double starRating =
-                overallScore / 20.0;
+                computeStarRating(overallScore);
 
-        // ── Fetch targets ────────────────────────
-        List<KpiTarget> targets =
-                kpiTargetRepository
-                        .findActiveByUserIdAndPeriod(
-                                userId, period);
-
+        // ── Targets ──────────────────────────────
+        // targets is already fetched for this user + period by the caller (getPersonalKpi's own
+        // query, or getTeamKpi's single batched query for the whole team).
         List<KpiDTO.TargetResponseDTO>
                 targetDTOs = targets.stream()
                 .map(this::mapTargetToDTO)
@@ -291,7 +348,7 @@ public class KpiCalculationService {
                 .avgResponseTimeMinutes(
                         round(avgResponseTime))
                 .customerSatisfactionScore(
-                        satisfaction)
+                        round(satisfaction))
                 .onTimeCompletionRate(
                         round(onTimeRate))
                 .totalRevenue(
@@ -322,33 +379,69 @@ public class KpiCalculationService {
     // ─── Get Team KPI ─────────────────────────────────────
 
     public KpiDTO.TeamKpiDTO getTeamKpi(
-            Long branchId, String period) {
+            Long opmcId, String period) {
         log.info(
                 "Calculating team KPI for "
-                        + "branchId={}, period={}",
-                branchId, period);
+                        + "opmcId={}, period={}",
+                opmcId, period);
 
         LocalDate[] range = getDateRange(period);
+        LocalDate startDate = range[0];
+        LocalDate endDate = range[1];
+        LocalDateTime startDateTime = startDate.atStartOfDay();
+        LocalDateTime endDateTime = endDate.atTime(23, 59, 59);
 
-        List<User> members =
-                userRepository.findAll().stream()
-                        .filter(u ->
-                                branchId.equals(
-                                        u.getBranchId())
-                                        && u.getRole()
-                                        != null
-                                        && ("TECHNICIAN"
-                                        .equals(u.getRole()
-                                                .name())
-                                        || "TEAM_LEAD"
-                                        .equals(u.getRole()
-                                                .name())))
-                        .collect(Collectors.toList());
+        List<User> members = userRepository.findByOpmcIdAndRoleIn(
+                opmcId, List.of(User.Role.TECHNICIAN, User.Role.TEAM_LEAD));
+
+        // QA_Compliance_Consolidated_Report.md — this used to call getPersonalKpi once per
+        // member, each of which ran its own set of findAll() full-table scans (jobs, payments)
+        // plus its own attendance/targets queries — O(N) query sets for an N-person team. Now
+        // batch-fetched in exactly 4 queries total regardless of team size, then grouped by the
+        // relevant user id in memory and handed to computePersonalKpi per member.
+        List<Long> memberIds = members.stream().map(User::getId).collect(Collectors.toList());
+
+        Map<Long, List<Job>> jobsByTechnicianId = memberIds.isEmpty() ? Map.of()
+                : jobRepository.findByTechnicianIdInAndCreatedAtBetween(
+                        memberIds, startDateTime, endDateTime)
+                    .stream().collect(Collectors.groupingBy(Job::getTechnicianId));
+
+        Map<Long, List<Payment>> paymentsByTeamLeadId = memberIds.isEmpty() ? Map.of()
+                : paymentRepository.findByTeamLeadIdInAndCreatedAtBetween(
+                        memberIds, startDateTime, endDateTime)
+                    .stream().collect(Collectors.groupingBy(Payment::getTeamLeadId));
+
+        Map<Long, List<CheckInOut>> attendanceByUserId = memberIds.isEmpty() ? Map.of()
+                : checkInOutRepository.findByUserIdsAndDateRange(
+                        memberIds, startDateTime, endDateTime)
+                    .stream().collect(Collectors.groupingBy(c -> c.getUser().getId()));
+
+        Map<Long, List<KpiTarget>> targetsByUserId = memberIds.isEmpty() ? Map.of()
+                : kpiTargetRepository.findActiveByUserIdInAndPeriod(memberIds, period)
+                    .stream().collect(Collectors.groupingBy(t -> t.getUser().getId()));
+
+        // QA_Compliance_Consolidated_Report.md #2 — one batched fault lookup for the whole team
+        // (same shape as the four batched queries above), not one per member. computePersonalKpi
+        // filters this shared list down to each member's own completed-job fault ids internally,
+        // so passing the same list to every member is safe.
+        List<Long> allFaultIds = jobsByTechnicianId.values().stream()
+                .flatMap(List::stream)
+                .map(Job::getFaultId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        List<Fault> allTeamFaults = allFaultIds.isEmpty()
+                ? List.of()
+                : faultRepository.findAllById(allFaultIds);
 
         List<KpiDTO.PersonalKpiDTO> memberKpis =
                 members.stream()
-                        .map(m -> getPersonalKpi(
-                                m.getId(), period))
+                        .map(m -> computePersonalKpi(m, period, startDate, endDate,
+                                jobsByTechnicianId.getOrDefault(m.getId(), List.of()),
+                                paymentsByTeamLeadId.getOrDefault(m.getId(), List.of()),
+                                attendanceByUserId.getOrDefault(m.getId(), List.of()),
+                                targetsByUserId.getOrDefault(m.getId(), List.of()),
+                                allTeamFaults))
                         .collect(Collectors.toList());
 
         // ── Aggregate team metrics ───────────────
@@ -426,8 +519,8 @@ public class KpiCalculationService {
                 .orElse(0);
 
         return KpiDTO.TeamKpiDTO.builder()
-                .branchId(branchId)
-                .branchName("Branch " + branchId)
+                .opmcId(opmcId)
+                .opmcName("OPMC " + opmcId)
                 .period(period)
                 .startDate(
                         range[0].format(DATE_FMT))
@@ -553,9 +646,15 @@ public class KpiCalculationService {
 
     // ─── Get Leaderboard ──────────────────────────────────
 
+    /**
+     * @param opmcFilter Stage F #2 — null means unscoped (Super Admin); otherwise only technicians in
+     *                   this OPMC are ranked. Resolved by the caller via
+     *                   {@link lk.slt.fieldops.shared.OpmcAccessGuard#resolveOpmcFilter}, never trusted
+     *                   from client input.
+     */
     public List<KpiDTO.LeaderboardEntryDTO>
     getLeaderboard(
-            String period, Long currentUserId) {
+            String period, Long currentUserId, Long opmcFilter) {
         log.info(
                 "Generating leaderboard "
                         + "for period={}",
@@ -571,15 +670,24 @@ public class KpiCalculationService {
                                         || "TEAM_LEAD"
                                         .equals(u.getRole()
                                                 .name())))
+                        .filter(u -> opmcFilter == null || opmcFilter.equals(u.getOpmcId()))
                         .collect(Collectors.toList());
 
         List<KpiDTO.LeaderboardEntryDTO>
                 leaderboard = new ArrayList<>();
 
+        LocalDate[] range = getDateRange(period);
+        LocalDate startDate = range[0];
+        LocalDate endDate = range[1];
+
         for (User tech : technicians) {
             List<Job> jobs =
                     jobRepository.findAll().stream()
                             .filter(j -> tech.getId().equals(j.getTechnicianId()))
+                            .filter(j ->
+                                    j.getCreatedAt() != null
+                                            && !j.getCreatedAt().toLocalDate().isBefore(startDate)
+                                            && !j.getCreatedAt().toLocalDate().isAfter(endDate))
                             .collect(Collectors.toList());
 
             long completed = jobs.stream()
@@ -610,9 +718,7 @@ public class KpiCalculationService {
             String perfColor =
                     getPerformanceColor(score);
             double starRating =
-                    Math.round(
-                            (score / 20.0) * 10.0)
-                            / 10.0;
+                    computeStarRating(score);
 
             String initial =
                     tech.getFullName() != null
@@ -632,10 +738,10 @@ public class KpiCalculationService {
                                     tech.getFullName())
                             .phone(tech.getPhone())
                             .avatarInitial(initial)
-                            .branchName(
-                                    tech.getBranchName()
+                            .opmcName(
+                                    tech.getOpmcName()
                                             != null
-                                            ? tech.getBranchName()
+                                            ? tech.getOpmcName()
                                             : "N/A")
                             .overallScore(
                                     round(score))
@@ -782,14 +888,14 @@ public class KpiCalculationService {
                         target.getIsGroupTarget()
                                 != null
                                 && target.getIsGroupTarget())
-                .branchId(
-                        target.getBranch() != null
-                                ? target.getBranch()
+                .opmcId(
+                        target.getOpmc() != null
+                                ? target.getOpmc()
                                 .getId()
                                 : null)
-                .branchName(
-                        target.getBranch() != null
-                                ? target.getBranch()
+                .opmcName(
+                        target.getOpmc() != null
+                                ? target.getOpmc()
                                 .getName()
                                 : null)
                 .build();
@@ -892,6 +998,15 @@ public class KpiCalculationService {
             case "MONTHLY": return 22;
             default: return 22;
         }
+    }
+
+    /** Discrete 1-5 star band, mirroring the same thresholds as getPerformanceLevel. */
+    private double computeStarRating(double score) {
+        if (score >= 90) return 5;
+        if (score >= 75) return 4;
+        if (score >= 60) return 3;
+        if (score >= 40) return 2;
+        return 1;
     }
 
     private String getPerformanceLevel(

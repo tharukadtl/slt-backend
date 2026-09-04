@@ -73,7 +73,7 @@ public class CabService {
      */
     @Transactional(readOnly = true)
     public List<CabDTO> getAll(Long opmcFilter, boolean activeOnly) {
-        List<Cab> base = activeOnly ? cabRepo.findByIsActiveTrue() : cabRepo.findAll();
+        List<Cab> base = activeOnly ? cabRepo.findActiveWithFullChain() : cabRepo.findAllWithFullChain();
         return base.stream()
             .filter(c -> opmcFilter == null || opmcFilter.equals(opmcIdOf(c)))
             .map(this::mapToDTO).collect(Collectors.toList());
@@ -101,7 +101,7 @@ public class CabService {
      */
     @Transactional(readOnly = true)
     public List<CabDTO> getByExchange(Long exchangeId, Long opmcFilter, boolean activeOnly) {
-        return cabRepo.findByExchangeId(exchangeId).stream()
+        return cabRepo.findByExchangeIdWithFullChain(exchangeId).stream()
             .filter(c -> opmcFilter == null || opmcFilter.equals(opmcIdOf(c)))
             .filter(c -> !activeOnly || Boolean.TRUE.equals(c.getIsActive()))
             .map(this::mapToDTO).collect(Collectors.toList());

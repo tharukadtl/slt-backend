@@ -53,7 +53,7 @@ public class InventoryService {
         m.setSku(req.getSku());
         m.setDescription(req.getDescription());
         m.setCategoryId(req.getCategoryId());
-        m.setBranchId(req.getBranchId());
+        m.setOpmcId(req.getOpmcId());
         m.setUnit(req.getUnit());
         m.setUnitPrice(req.getUnitPrice() != null ? req.getUnitPrice() : BigDecimal.ZERO);
         m.setCurrentStock(req.getCurrentStock() != null ? req.getCurrentStock() : BigDecimal.ZERO);
@@ -100,8 +100,8 @@ public class InventoryService {
     public Material getMaterialById(Long id) { return findMaterialOrThrow(id); }
 
     @Transactional(readOnly = true)
-    public List<Material> getByBranch(Long branchId) {
-        return materialRepo.findByBranchIdAndIsActiveTrue(branchId);
+    public List<Material> getByOpmc(Long opmcId) {
+        return materialRepo.findByOpmcIdAndIsActiveTrue(opmcId);
     }
 
     @Transactional(readOnly = true)
@@ -214,7 +214,7 @@ public class InventoryService {
         MaterialRequest request = new MaterialRequest();
         request.setMaterialId(req.getMaterialId());
         request.setMaterialName(material.getName());
-        request.setBranchId(req.getBranchId());
+        request.setOpmcId(req.getOpmcId());
         request.setRequestedBy(userId);
         request.setRequestedByName(userName);
         request.setQuantityRequested(req.getQuantityRequested());
@@ -278,8 +278,8 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<MaterialRequest> getRequestsByBranch(Long branchId) {
-        return requestRepo.findByBranchIdOrderByCreatedAtDesc(branchId);
+    public List<MaterialRequest> getRequestsByOpmc(Long opmcId) {
+        return requestRepo.findByOpmcIdOrderByCreatedAtDesc(opmcId);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -292,8 +292,8 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<Material> getLowStockByBranch(Long branchId) {
-        return materialRepo.findLowStockByBranch(branchId);
+    public List<Material> getLowStockByOpmc(Long opmcId) {
+        return materialRepo.findLowStockByOpmc(opmcId);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -364,6 +364,7 @@ public class InventoryService {
         tx.setReferenceId(refId);
         tx.setNotes(notes);
         tx.setPerformedBy(performedBy);
+        tx.setIpAddress(lk.slt.fieldops.shared.RequestContext.getClientIp());
         txRepo.save(tx);
     }
 }

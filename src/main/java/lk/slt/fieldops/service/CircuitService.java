@@ -76,7 +76,8 @@ public class CircuitService {
      */
     @Transactional(readOnly = true)
     public List<CircuitDTO> getAll(Long opmcFilter, boolean activeOnly) {
-        List<Circuit> base = activeOnly ? circuitRepo.findByIsActiveTrue() : circuitRepo.findAll();
+        List<Circuit> base = activeOnly
+            ? circuitRepo.findActiveWithFullChain() : circuitRepo.findAllWithFullChain();
         return base.stream()
             .filter(c -> opmcFilter == null || opmcFilter.equals(opmcIdOf(c)))
             .map(this::mapToDTO).collect(Collectors.toList());
@@ -104,7 +105,7 @@ public class CircuitService {
      */
     @Transactional(readOnly = true)
     public List<CircuitDTO> getByDp(Long dpId, Long opmcFilter, boolean activeOnly) {
-        return circuitRepo.findByDpId(dpId).stream()
+        return circuitRepo.findByDpIdWithFullChain(dpId).stream()
             .filter(c -> opmcFilter == null || opmcFilter.equals(opmcIdOf(c)))
             .filter(c -> !activeOnly || Boolean.TRUE.equals(c.getIsActive()))
             .map(this::mapToDTO).collect(Collectors.toList());

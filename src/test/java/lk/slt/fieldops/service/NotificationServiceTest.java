@@ -259,9 +259,10 @@ class NotificationServiceTest {
     @Test
     void requestStatusChange_techNotified() {
         // ── Arrange ──────────────────────────────────────────────────────────────────────────
+        NotificationService realNotifier = new NotificationService(notificationRepo);
         MaterialRequestService requestService = new MaterialRequestService(
             materialRequestRepo, materialRepo, materialCategoryRepo, userRepo,
-            stockTransactionRepo, webSocketEventPublisher, workGroupAllocationRepo);
+            stockTransactionRepo, webSocketEventPublisher, workGroupAllocationRepo, realNotifier);
 
         User technician = new User();
         technician.setId(MR_TECH_ID);
@@ -455,7 +456,8 @@ class NotificationServiceTest {
         // ── Arrange: a REPORTED fault, the Work Group + Team Lead it is given to, and the admin ──
         FaultAssignmentService assignmentService = new FaultAssignmentService(
             faultRepo, userRepo, historyRepo, noteRepo, webSocketEventPublisher, workGroupRepository,
-            new lk.slt.fieldops.shared.OpmcAccessGuard(userRepo));
+            new lk.slt.fieldops.shared.OpmcAccessGuard(userRepo),
+            new NotificationService(notificationRepo), jobRepo);
 
         Fault fault = reportedFault();
         when(faultRepo.findById(FAULT_ID)).thenReturn(Optional.of(fault));
@@ -578,8 +580,10 @@ class NotificationServiceTest {
     @Test
     void paymentApproved_fcmToTeamLead() {
         // ── Arrange: a DRAFT payment submitted by a Team Lead, awaiting admin review ─────────
+        NotificationService realNotifier = new NotificationService(notificationRepo);
         PaymentService paymentService = new PaymentService(
-            paymentRepo, approvalRepo, jobRepo, faultRepo, webSocketEventPublisher);
+            paymentRepo, approvalRepo, jobRepo, faultRepo, webSocketEventPublisher,
+            userRepo, realNotifier);
 
         Payment payment = new Payment();
         payment.setId(NP_PAYMENT_ID);
@@ -599,6 +603,12 @@ class NotificationServiceTest {
         when(paymentRepo.countBilledByYearMonth(anyInt(), anyInt())).thenReturn(0L);
         when(approvalRepo.save(any(PaymentApproval.class))).thenAnswer(inv -> inv.getArgument(0));
         when(notificationRepo.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        User teamLead = new User();
+        teamLead.setId(NP_TEAM_LEAD_ID);
+        teamLead.setFullName("TL Tharindu");
+        teamLead.setFcmToken("fcm-token-tl-500");
+        when(userRepo.findById(NP_TEAM_LEAD_ID)).thenReturn(Optional.of(teamLead));
 
         ReviewPaymentRequest approve = new ReviewPaymentRequest();
         approve.setDecision("APPROVED");

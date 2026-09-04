@@ -21,13 +21,23 @@ public interface MaterialRequestRepository
     List<MaterialRequest> findByStatusOrderByCreatedAtAsc(
             @Param("status") MaterialRequest.RequestStatus status);
 
-    // ─── Find by Branch ───────────────────────────────────
+    // SRS 5.5.3 (v1.9) — a Team Lead's own Work Group's pending queue, scoped
+    // server-side (never a client-trusted param), mirroring the OPMC-scoping
+    // pattern used elsewhere in this project.
+    @Query("SELECT mr FROM MaterialRequest mr "
+            + "WHERE mr.status = :status AND mr.workGroupId = :workGroupId "
+            + "ORDER BY mr.createdAt ASC")
+    List<MaterialRequest> findByStatusAndWorkGroupIdOrderByCreatedAtAsc(
+            @Param("status") MaterialRequest.RequestStatus status,
+            @Param("workGroupId") Long workGroupId);
+
+    // ─── Find by OPMC ───────────────────────────────────────
 
     @Query("SELECT mr FROM MaterialRequest mr "
-            + "WHERE mr.branchId = :branchId "
+            + "WHERE mr.opmcId = :opmcId "
             + "ORDER BY mr.createdAt DESC")
-    List<MaterialRequest> findByBranchIdOrderByCreatedAtDesc(
-            @Param("branchId") Long branchId);
+    List<MaterialRequest> findByOpmcIdOrderByCreatedAtDesc(
+            @Param("opmcId") Long opmcId);
 
     // ─── Find by Requester ────────────────────────────────
 

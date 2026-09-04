@@ -19,8 +19,8 @@ public interface KpiTargetRepository
     // ─── Find branch-level monthly target ────────────────
 
     java.util.Optional<KpiTarget>
-    findByBranchIdAndTargetYearAndTargetMonth(
-            Long branchId, Integer targetYear, Integer targetMonth);
+    findByMonthlyTargetBranchIdAndTargetYearAndTargetMonth(
+            Long monthlyTargetBranchId, Integer targetYear, Integer targetMonth);
 
     // ─── Find by User ─────────────────────────────────────
 
@@ -49,14 +49,25 @@ public interface KpiTargetRepository
             @Param("userId") Long userId,
             @Param("period") String period);
 
-    // ─── Find by Branch ───────────────────────────────────
+    // QA_Compliance_Consolidated_Report.md — lets KpiCalculationService.getTeamKpi fetch every
+    // member's active targets in one query instead of one query per member.
+    @Query("SELECT kt FROM KpiTarget kt "
+            + "WHERE kt.user.id IN :userIds "
+            + "AND kt.period = :period "
+            + "AND kt.isActive = true "
+            + "ORDER BY kt.createdAt DESC")
+    List<KpiTarget> findActiveByUserIdInAndPeriod(
+            @Param("userIds") List<Long> userIds,
+            @Param("period") String period);
+
+    // ─── Find by OPMC ───────────────────────────────────────
 
     @Query("SELECT kt FROM KpiTarget kt "
-            + "WHERE kt.branch.id = :branchId "
+            + "WHERE kt.opmc.id = :opmcId "
             + "AND kt.isGroupTarget = true "
             + "AND kt.isActive = true")
-    List<KpiTarget> findGroupTargetsByBranchId(
-            @Param("branchId") Long branchId);
+    List<KpiTarget> findGroupTargetsByOpmcId(
+            @Param("opmcId") Long opmcId);
 
     // ─── Find by Assigned By ──────────────────────────────
 

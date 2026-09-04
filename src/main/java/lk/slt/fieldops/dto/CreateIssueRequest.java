@@ -1,24 +1,35 @@
 package lk.slt.fieldops.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 
 public class CreateIssueRequest {
 
     private String title;
 
     @NotBlank(message = "Description is required")
+    @Size(max = 500, message = "Description must not exceed 500 characters")
     private String description;
 
     @NotBlank(message = "Category is required")
     private String category; // broadband | telephone | fiber | television | other
 
+    @NotNull(message = "Location is required")
+    @Valid
     private LocationDto location;
 
     private String[] photos;
 
     public static class LocationDto {
+        @NotBlank(message = "Location address is required")
         private String address;
+
+        @NotNull(message = "Latitude is required")
         private Double latitude;
+
+        @NotNull(message = "Longitude is required")
         private Double longitude;
 
         public String getAddress()   { return address; }

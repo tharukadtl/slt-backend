@@ -34,15 +34,25 @@ public class MaterialRequest {
     private String requestNumber;
 
     // ─── Material ─────────────────────────────────────────
-    @Column(name = "material_id", nullable = false)
+    // Nullable: the live multi-item submission flow (MaterialRequestService)
+    // packs items into itemsData instead of a single materialId. Only the
+    // legacy single-item path (InventoryService) populates this field.
+    @Column(name = "material_id")
     private Long materialId;
 
     @Column(name = "material_name", length = 200)
     private String materialName;
 
-    // ─── Branch ───────────────────────────────────────────
-    @Column(name = "branch_id")
-    private Long branchId;
+    // ─── OPMC / Work Group ─────────────────────────────────
+    @Column(name = "opmc_id")
+    private Long opmcId;
+
+    // Stage D (SRS 5.5.3): the requester's Work Group at submission time. Set for
+    // Technician/Team Lead requesters (who always belong to one); null for a
+    // requester with no Work Group, in which case approval falls back to the
+    // pre-Stage-D direct-from-OPMC-pool behavior (see MaterialRequestService).
+    @Column(name = "work_group_id")
+    private Long workGroupId;
 
     // ─── Requester (flat ID) ──────────────────────────────
     @Column(name = "requested_by", nullable = false)

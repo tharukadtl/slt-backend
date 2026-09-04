@@ -70,6 +70,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * {@code JobReassignIntegrationTest}'s and this project's established convention for this fix
  * family: real JWT filter, real {@code @PreAuthorize}, real MySQL, {@code @Transactional} rollback.
  * </p>
+ *
+ * <p><b>2026-09-03, CI-portable-database fix.</b> Every test in this class previously assumed OPMC
+ * id=1 already existed in the database ({@code REAL_OPMC_ID = 1L}, looked up via
+ * {@code opmcRepo.findById(REAL_OPMC_ID).orElseThrow()}) — a real row that has only ever existed
+ * because this suite has run against the same long-lived local dev database all session, never
+ * because any fixture created it. Against a genuinely fresh Testcontainers MySQL instance this threw
+ * immediately. Fixed by threading a per-test, freshly-created {@code Opmc} through {@code bearer}/
+ * {@code newUser}/{@code reportRequest} instead of a shared hardcoded id — the exact pattern already
+ * established correctly in {@code FaultWorkGroupAssignmentIntegrationTest} and ~40 other sibling
+ * files this session.</p>
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -86,16 +96,14 @@ class FaultReassignIntegrationTest {
     @Autowired private ObjectMapper             json;
     @Autowired private jakarta.persistence.EntityManager em;
 
-    private static final Long REAL_OPMC_ID = 1L;
-
     private static final AtomicLong SEQ = new AtomicLong(System.nanoTime());
     private long uniq() { return SEQ.incrementAndGet(); }
 
-    private String bearer(Long userId, String role) {
-        return "Bearer " + jwt.createAccessToken(userId, "frt" + userId, role, REAL_OPMC_ID);
+    private String bearer(Long userId, String role, Long opmcId) {
+        return "Bearer " + jwt.createAccessToken(userId, "frt" + userId, role, opmcId);
     }
 
-    private User newUser(User.Role role, String fullName) {
+    private User newUser(User.Role role, String fullName, Long opmcId) {
         long n = uniq();
         User u = new User();
         u.setUsername("frt" + n);
@@ -105,14 +113,15 @@ class FaultReassignIntegrationTest {
         u.setFullName(fullName);
         u.setPhone("07" + (10000000L + (n % 80000000L)));
         u.setRole(role);
-        u.setOpmcId(REAL_OPMC_ID);
+        u.setOpmcId(opmcId);
         return userRepo.save(u);
     }
 
-    private Opmc newOtherOpmc() {
+    /** A fresh, genuinely persisted OPMC — no test may assume any OPMC id pre-exists. */
+    private Opmc newOpmc() {
         long n = uniq();
         Opmc o = new Opmc();
-        o.setName("FRT Other OPMC " + n);
+        o.setName("FRT Test OPMC " + n);
         o.setCode("FR" + n);
         o.setAddress("123 Test Road");
         return opmcRepo.save(o);
@@ -127,7 +136,7 @@ class FaultReassignIntegrationTest {
         return workGroupRepo.save(wg);
     }
 
-    private ReportFaultRequest reportRequest() {
+    private ReportFaultRequest reportRequest(Long opmcId) {
         ReportFaultRequest req = new ReportFaultRequest();
         req.setCategory("BROADBAND");
         req.setDescription("No internet since 08:00");
@@ -135,16 +144,16 @@ class FaultReassignIntegrationTest {
         req.setLocationCity("Colombo");
         req.setLatitude(6.9271);
         req.setLongitude(79.8612);
-        req.setOpmcId(REAL_OPMC_ID);
+        req.setOpmcId(opmcId);
         req.setPriority("HIGH");
         return req;
     }
 
     private Long faultFor(User client) throws Exception {
         MvcResult res = mvc.perform(post("/api/faults")
-                .header("Authorization", bearer(client.getId(), "CLIENT"))
+                .header("Authorization", bearer(client.getId(), "CLIENT", client.getOpmcId()))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content(json.writeValueAsString(reportRequest())))
+                .content(json.writeValueAsString(reportRequest(client.getOpmcId()))))
             .andReturn();
         assertEquals(201, res.getResponse().getStatus(),
             "Fault setup POST failed. Body: " + res.getResponse().getContentAsString());
@@ -158,7 +167,7 @@ class FaultReassignIntegrationTest {
                 .reason(reason)
                 .build();
         return mvc.perform(post("/api/faults/{id}/reassign", faultId)
-                .header("Authorization", bearer(caller.getId(), role))
+                .header("Authorization", bearer(caller.getId(), role, caller.getOpmcId()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(body)))
             .andReturn();
@@ -170,12 +179,12 @@ class FaultReassignIntegrationTest {
 
     @Test
     void adminReassignsFaultToDifferentActiveWorkGroup_succeeds() throws Exception {
-        Opmc realOpmc = opmcRepo.findById(REAL_OPMC_ID).orElseThrow();
-        WorkGroup oldWorkGroup = newWorkGroup(realOpmc, true);
-        WorkGroup newWorkGroup = newWorkGroup(realOpmc, true);
-        User client = newUser(User.Role.CLIENT, "Client Chandima");
-        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha");
-        User oldLead = newUser(User.Role.TEAM_LEAD, "Old Lead Somasiri");
+        Opmc opmc = newOpmc();
+        WorkGroup oldWorkGroup = newWorkGroup(opmc, true);
+        WorkGroup newWorkGroup = newWorkGroup(opmc, true);
+        User client = newUser(User.Role.CLIENT, "Client Chandima", opmc.getId());
+        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha", opmc.getId());
+        User oldLead = newUser(User.Role.TEAM_LEAD, "Old Lead Somasiri", opmc.getId());
 
         Long faultId = faultFor(client);
 
@@ -220,10 +229,10 @@ class FaultReassignIntegrationTest {
 
     @Test
     void superAdminCanReassignFault_notForbidden() throws Exception {
-        Opmc realOpmc = opmcRepo.findById(REAL_OPMC_ID).orElseThrow();
-        WorkGroup newWorkGroup = newWorkGroup(realOpmc, true);
-        User client = newUser(User.Role.CLIENT, "Client Chandima");
-        User superAdmin = newUser(User.Role.SUPER_ADMIN, "Super Sarath");
+        Opmc opmc = newOpmc();
+        WorkGroup newWorkGroup = newWorkGroup(opmc, true);
+        User client = newUser(User.Role.CLIENT, "Client Chandima", opmc.getId());
+        User superAdmin = newUser(User.Role.SUPER_ADMIN, "Super Sarath", opmc.getId());
 
         Long faultId = faultFor(client);
 
@@ -238,10 +247,10 @@ class FaultReassignIntegrationTest {
 
     @Test
     void teamLeadCannotReassignFault_forbidden() throws Exception {
-        Opmc realOpmc = opmcRepo.findById(REAL_OPMC_ID).orElseThrow();
-        WorkGroup newWorkGroup = newWorkGroup(realOpmc, true);
-        User client = newUser(User.Role.CLIENT, "Client Chandima");
-        User teamLead = newUser(User.Role.TEAM_LEAD, "Lead Kamal");
+        Opmc opmc = newOpmc();
+        WorkGroup newWorkGroup = newWorkGroup(opmc, true);
+        User client = newUser(User.Role.CLIENT, "Client Chandima", opmc.getId());
+        User teamLead = newUser(User.Role.TEAM_LEAD, "Lead Kamal", opmc.getId());
 
         Long faultId = faultFor(client);
 
@@ -258,10 +267,11 @@ class FaultReassignIntegrationTest {
 
     @Test
     void reassignToWorkGroupInDifferentOpmc_isRefused() throws Exception {
-        Opmc otherOpmc = newOtherOpmc();
+        Opmc ownOpmc = newOpmc();
+        Opmc otherOpmc = newOpmc();
         WorkGroup foreignWorkGroup = newWorkGroup(otherOpmc, true);
-        User client = newUser(User.Role.CLIENT, "Client Chandima");
-        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha");
+        User client = newUser(User.Role.CLIENT, "Client Chandima", ownOpmc.getId());
+        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha", ownOpmc.getId());
 
         Long faultId = faultFor(client);
 
@@ -279,10 +289,10 @@ class FaultReassignIntegrationTest {
 
     @Test
     void reassignToInactiveWorkGroup_isRefused() throws Exception {
-        Opmc realOpmc = opmcRepo.findById(REAL_OPMC_ID).orElseThrow();
-        WorkGroup inactiveWorkGroup = newWorkGroup(realOpmc, false);
-        User client = newUser(User.Role.CLIENT, "Client Chandima");
-        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha");
+        Opmc opmc = newOpmc();
+        WorkGroup inactiveWorkGroup = newWorkGroup(opmc, false);
+        User client = newUser(User.Role.CLIENT, "Client Chandima", opmc.getId());
+        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha", opmc.getId());
 
         Long faultId = faultFor(client);
 
@@ -308,11 +318,11 @@ class FaultReassignIntegrationTest {
      */
     @Test
     void reassignCompletedFault_isRefused() throws Exception {
-        Opmc realOpmc = opmcRepo.findById(REAL_OPMC_ID).orElseThrow();
-        WorkGroup oldWorkGroup = newWorkGroup(realOpmc, true);
-        WorkGroup newWorkGroup = newWorkGroup(realOpmc, true);
-        User client = newUser(User.Role.CLIENT, "Client Chandima");
-        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha");
+        Opmc opmc = newOpmc();
+        WorkGroup oldWorkGroup = newWorkGroup(opmc, true);
+        WorkGroup newWorkGroup = newWorkGroup(opmc, true);
+        User client = newUser(User.Role.CLIENT, "Client Chandima", opmc.getId());
+        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha", opmc.getId());
 
         Long faultId = faultFor(client);
         Fault fault = faultRepo.findById(faultId).orElseThrow();
@@ -345,11 +355,11 @@ class FaultReassignIntegrationTest {
     /** Same guard, the other terminal status — {@code assignFault}'s sibling check covers both. */
     @Test
     void reassignCancelledFault_isRefused() throws Exception {
-        Opmc realOpmc = opmcRepo.findById(REAL_OPMC_ID).orElseThrow();
-        WorkGroup oldWorkGroup = newWorkGroup(realOpmc, true);
-        WorkGroup newWorkGroup = newWorkGroup(realOpmc, true);
-        User client = newUser(User.Role.CLIENT, "Client Chandima");
-        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha");
+        Opmc opmc = newOpmc();
+        WorkGroup oldWorkGroup = newWorkGroup(opmc, true);
+        WorkGroup newWorkGroup = newWorkGroup(opmc, true);
+        User client = newUser(User.Role.CLIENT, "Client Chandima", opmc.getId());
+        User admin  = newUser(User.Role.ADMIN,  "Admin Anusha", opmc.getId());
 
         Long faultId = faultFor(client);
         Fault fault = faultRepo.findById(faultId).orElseThrow();

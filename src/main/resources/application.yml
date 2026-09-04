@@ -1,20 +1,21 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://aws-1-ap-northeast-1.pooler.supabase.com:5432/postgres?sslmode=require}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres.usgyysfbchyuiclzdgis}
-    password: ${SPRING_DATASOURCE_PASSWORD:Tharuka@123}
-    driver-class-name: org.postgresql.Driver
+    # No insecure defaults: SPRING_DATASOURCE_USERNAME/PASSWORD are required env vars
+    # (or come from application-local.yml under the "local" profile — see README.md).
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/slt_fieldops_db?useSSL=false&serverTimezone=Asia/Colombo&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
       ddl-auto: update
     show-sql: true
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
-        default_schema: public
 
   jackson:
     time-zone: Asia/Colombo
@@ -38,7 +39,11 @@ app:
 
   # ── JWT ─────────────────────────────────────────────────
   jwt:
-    secret: ${JWT_SECRET:SLT-FieldOps-JWT-Secret-Key-2026-LLCSX25311-Tharuka-Very-Long-Secure-Key-Min-64-Chars}
+    # No insecure default: JWT_SECRET is a required env var (or comes from
+    # application-local.yml under the "local" profile — see README.md). A
+    # hardcoded fallback here would mean anyone reading this file could forge
+    # valid tokens for any deployment that forgot to override it.
+    secret: ${JWT_SECRET}
     access-token-expiry-ms: ${JWT_EXPIRATION_MS:1800000}
     refresh-token-expiry-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
 
@@ -46,10 +51,18 @@ app:
   otp:
     expiry-minutes: 5
     max-attempts: 3
+    resend-cooldown-seconds: 60
+    rate-limit-window-minutes: 10
+    rate-limit-max-requests: 3
+    account-lock-minutes: 15
 
   # ── SMS ─────────────────────────────────────────────────
   sms:
     enabled: false
+
+  # ── Rate Limiting ─────────────────────────────────────────
+  rate-limit:
+    max-requests-per-minute: 100
     provider: mock
 
   # ── Firebase Push Notifications ─────────────────────────
@@ -94,10 +107,13 @@ app:
     export-dir: temp/reports
     max-export-days: 90
 
-  # ── KPI ──────────────────────────────────────────────────
-  kpi:
-    calculation-interval-hours: 1
-    leaderboard-cache-minutes: 15
+  # ── AI Module (Flask, used by REP-06/REP-07 report export) ─
+  ai:
+    base-url: ${AI_MODULE_URL:http://localhost:5000}
+
+  # ── File Uploads ─────────────────────────────────────────
+  uploads:
+    dir: uploads
 
   # ── Location ─────────────────────────────────────────────
   location:

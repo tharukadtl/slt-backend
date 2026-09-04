@@ -29,16 +29,20 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     List<User> findByRole(User.Role role);
 
-    List<User> findByBranchId(Long branchId);
+    List<User> findByOpmcId(Long opmcId);
 
-    List<User> findByBranchIdAndRole(Long branchId, User.Role role);
+    List<User> findByOpmcIdAndRole(Long opmcId, User.Role role);
+
+    // QA_Compliance_Consolidated_Report.md — KpiCalculationService.getTeamKpi previously loaded
+    // the ENTIRE users table via findAll() and filtered by opmcId/role in memory.
+    List<User> findByOpmcIdAndRoleIn(Long opmcId, List<User.Role> roles);
 
     List<User> findByIsActiveTrue();
 
     List<User> findByRoleAndIsActiveTrue(User.Role role);
 
-    @Query("SELECT u FROM User u WHERE u.role = :role AND u.isActive = true AND u.branchId = :branchId")
-    List<User> findActiveByRoleAndBranch(User.Role role, Long branchId);
+    @Query("SELECT u FROM User u WHERE u.role = :role AND u.isActive = true AND u.opmcId = :opmcId")
+    List<User> findActiveByRoleAndOpmc(User.Role role, Long opmcId);
 
     @Query("SELECT COUNT(u) FROM User u WHERE u.role = :role AND u.isActive = true")
     long countActiveByRole(User.Role role);

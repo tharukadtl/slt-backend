@@ -11,7 +11,7 @@ public class AuthResponse {
     private String role;
     private String fullName;
     private String phoneNumber;
-    private Long branchId;
+    private Long opmcId;
 
     private Long expiresIn;
 
@@ -35,7 +35,7 @@ public class AuthResponse {
 
     public String getPhoneNumber() { return phoneNumber; }
 
-    public Long getBranchId() { return branchId; }
+    public Long getOpmcId() { return opmcId; }
 
     public Long getExpiresIn() { return expiresIn; }
 
@@ -73,8 +73,8 @@ public class AuthResponse {
         this.phoneNumber = phoneNumber;
     }
 
-    public void setBranchId(Long branchId) {
-        this.branchId = branchId;
+    public void setOpmcId(Long opmcId) {
+        this.opmcId = opmcId;
     }
 
     public void setExpiresIn(Long expiresIn) {

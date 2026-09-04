@@ -1,0 +1,149 @@
+{
+  "info": {
+    "_postman_id": "d3c9a71e-5b62-4f18-9a3d-6f0c2e4b7a19",
+    "name": "SLT_Payments_Collection",
+    "description": "PAY-013 (04_PAYMENT_FLOW, FR-10/FR-11) — payment submit-then-approve lifecycle via Newman.\n\nRun:\n  newman run fieldops/src/test/postman/SLT_Payments_Collection.json \\\n    --env-var baseUrl=http://localhost:8080 \\\n    --env-var tlToken=<TEAM_LEAD JWT> \\\n    --env-var adminToken=<ADMIN JWT> \\\n    --env-var jobId=<a completed job with no payment yet>\n\nNOTE ON THE STATUS VOCABULARY: the sheet's script asserts status 'PENDING' after submit and\n'APPROVED' after approve. Payment.PaymentStatus has neither constant. The real states are DRAFT\n(submitted, awaiting admin review — this IS the sheet's 'PENDING'; GET /api/payments/pending serves\nexactly it) and FINAL (approved). This collection therefore asserts the real machine.\n\nNOTE ON THE ENDPOINT: the sheet writes PATCH /api/payments/{id}/approve. The real review endpoint is\nPATCH /api/payments/{id}/review with a {\"decision\":\"APPROVED\"} body (PaymentController.review),\nwhich also carries the REJECTED and CLARIFICATION_REQUESTED decisions.\n\nnewman is not installed in this environment and nothing listens on :8080, so this collection cannot\nproduce a verdict here. Its executable twin is\nfieldops/src/test/java/lk/slt/fieldops/controller/SltPaymentsCollectionTest.java, which asserts\nexactly the same things through MockMvc against the real database.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Submit_Then_Approve_Lifecycle",
+      "item": [
+        {
+          "name": "1. POST /api/payments -> 201 DRAFT (awaiting review)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test('PENDING (= DRAFT, awaiting admin review)', function () {",
+                  "    pm.expect(pm.response.json().status).to.eql('DRAFT');",
+                  "});",
+                  "pm.test('billed total excludes FOC', function () {",
+                  "    pm.expect(Number(pm.response.json().totalAmount)).to.eql(4550);",
+                  "});",
+                  "pm.environment.set('paymentId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{tlToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"jobId\":{{jobId}},\"materialsFocTotal\":1000.00,\"materialsChargeableTotal\":800.00,\"labourCharge\":3750.00,\"customerSignatureUrl\":\"data:image/png;base64,B64SIGNATUREDATA\",\"materialJustification\":\"Standard repair\",\"workSummary\":\"Standard repair\"}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments"]
+            }
+          }
+        },
+        {
+          "name": "2. GET /api/payments/pending -> the new payment is queued for Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('submitted payment is in the admin review queue', function () {",
+                  "    var id = Number(pm.environment.get('paymentId'));",
+                  "    pm.expect(pm.response.json().some(function (p) { return p.id === id; })).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{adminToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/pending",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "pending"]
+            }
+          }
+        },
+        {
+          "name": "3. PATCH /api/payments/{{paymentId}}/review -> 200 FINAL (approved)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('APPROVED (= FINAL)', function () {",
+                  "    pm.expect(pm.response.json().status).to.eql('FINAL');",
+                  "});",
+                  "pm.test('approvedAmount is the chargeable-only total', function () {",
+                  "    pm.expect(Number(pm.response.json().approvedAmount)).to.eql(4550);",
+                  "});",
+                  "pm.test('bill reference minted', function () {",
+                  "    pm.expect(pm.response.json().billReference).to.not.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{adminToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\"decision\":\"APPROVED\"}"},
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/{{paymentId}}/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "{{paymentId}}", "review"]
+            }
+          }
+        },
+        {
+          "name": "4. GET /api/payments/{{paymentId}}/approvals -> APPROVED audit row",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('an APPROVED audit row was written', function () {",
+                  "    pm.expect(pm.response.json().some(function (a) { return a.action === 'APPROVED'; })).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{adminToken}}"}],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/{{paymentId}}/approvals",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "payments", "{{paymentId}}", "approvals"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

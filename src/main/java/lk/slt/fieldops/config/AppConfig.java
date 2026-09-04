@@ -12,9 +12,20 @@ import org.springframework.context.annotation
         .Configuration;
 import org.springframework.context.annotation
         .Primary;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
 
 @Configuration
 public class AppConfig {
+
+    /** Used to call the Flask AI module (predictions/clusters) for REP-06/REP-07 report export. */
+    @Bean
+    public RestTemplate restTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(15000);
+        return new RestTemplate(factory);
+    }
 
     /**
      * Global ObjectMapper configured with:

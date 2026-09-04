@@ -4,6 +4,21 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+### Local-only secrets (never commit real JWT secret / DB password) ###
+application-local.yml
+.env
+
+### Local runtime noise (logs, uploads, generated reports) ###
+logs/
+backend-run.log
+full_regression_ws*.log
+temp/
+uploads/
+
+### Claude Code's own local memory/config (not project source) ###
+.claude/agent-memory/
+.claude/settings.local.json
+
 ### STS ###
 .apt_generated
 .classpath

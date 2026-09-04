@@ -1,0 +1,186 @@
+
+====================================================================================================
+H1a GEOCODING REPORT
+====================================================================================================
+
+--- Exchange: 237 resolved / 71 low-confidence / 69 failed (of 377 attempted) ---
+
+  LOW-CONFIDENCE (NOT written to DB, needs manual review):
+    AMB        'Ambulgama'                         -> query 'Ambulgama'                    class=highway type=primary importance=0.053 -> Panagoda-Ambulgama Road, Henpita, Embulgama, Colombo District, Western Province, 10654, Sri Lanka
+    AND        'Andankulam'                        -> query 'Andankulam'                   class=building type=yes importance=0.000 -> Naval Water Purification Plant Andankulam, 2nd Lane, Sinhapura, Trincomalee District, Eastern Province, 31003, Sri Lanka
+    APK        'Ampitikanda'                       -> query 'Ampitikanda'                  class=highway type=unclassified importance=0.053 -> Monarakanda - Ampitikanda State Road, Maousakelie, Meeriyabedda State, Badulla District, Uva Province, 90190, Sri Lanka
+    BL         'Beliatta'                          -> query 'Beliatta'                     class=landuse type=farmland importance=0.080 -> Beliatta_paddy, Talahagamwaduwa, Hambantota District, Southern Province, Sri Lanka
+    BTP        'Batapola'                          -> query 'Batapola'                     class=highway type=primary importance=0.053 -> Kahawa-Batapola Road, Meetiyagoda, Galle District, Southern Province, 80330, Sri Lanka
+    CB         'China Bay'                         -> query 'China Bay'                    class=railway type=station importance=0.117 -> China Bay, Trincomalee-Batticaloa Road, Sinhapura, Trincomalee District, Eastern Province, 31003, Sri Lanka
+    CEN        'Co. Central'                       -> query 'Co. Central'                  class=highway type=residential importance=0.053 -> Central, Hingurakgoda, Polonnaruwa District, North Central Province, Sri Lanka
+    CHR        'Church Road'                       -> query 'Church Road'                  class=highway type=residential importance=0.053 -> Church Road, Mabole, Wattala, Gampaha District, Western Province, 11104, Sri Lanka
+    CKM        'Chunnakam'                         -> query 'Chunnakam'                    class=railway type=station importance=0.173 -> Chunnakam, Puttur - Kantharoday, Chunnakam, Jaffna District, Northern Province, 40000, Sri Lanka
+    CVA        'Chavakachcheri'                    -> query 'Chavakachcheri'               class=railway type=station importance=0.182 -> Chavakachcheri, Chavakachcheri-Puloly Road B75, Chavakachcheri, Jaffna District, Northern Province, Sri Lanka
+    DJ         'Dunagaha'                          -> query 'Dunagaha'                     class=place type=village importance=0.000 -> Dunagaha, Gampaha District, Western Province, Sri Lanka
+    DOW        'Dehiovita'                         -> query 'Dehiovita'                    class=amenity type=townhall importance=0.000 -> Dehiovita Pradeshiya Saba Building, Yatiyantota Road, Urupelawwa, Iriyagolla, Kegalle District, Sabaragamuwa Province, 71400, Sri Lanka
+    EGD        'Egoda Uyana'                       -> query 'Egoda Uyana'                  class=railway type=station importance=0.000 -> Egoda Uyana, Galle Road New Deviation, Moratuwa, Colombo District, Western Province, 12550, Sri Lanka
+    EMU        'Embuldeniya'                       -> query 'Embuldeniya'                  class=place type=neighbourhood importance=0.080 -> Embuldeniya, Mirihana, Sri Jayewardenepura Kotte, Colombo District, Western Province, 10250, Sri Lanka
+    GMK        'Gomarankadawela'                   -> query 'Gomarankadawela'              class=highway type=secondary importance=0.053 -> Ethbediwewa-Gomarankadawela road, Gomarankadawala, Trincomalee District, Eastern Province, Sri Lanka
+    GO         'Gelioya'                           -> query 'Gelioya'                      class=railway type=stop importance=0.000 -> Gelioya, Station Road, Daulagala, Kandy District, Central Province, 20460, Sri Lanka
+    HE         'Haliela'                           -> query 'Haliela'                      class=highway type=residential importance=0.053 -> Haliela Road, Lenabatuwa, Matara District, Southern Province, 81100, Sri Lanka
+    HGY        'Halgranoya'                        -> query 'Halgranoya'                   class=place type=locality importance=0.067 -> Halgranoya, Rathnayakapathana, Ragala, Nuwara Eliya District, Central Province, Sri Lanka
+    HLC        'Havelock City'                     -> query 'Havelock City'                class=landuse type=residential importance=0.000 -> Havelock City, Elibank tower path, Wellawatte, Colombo, Colombo District, Western Province, 00006, Sri Lanka
+    HPG        'Handapangoda'                      -> query 'Handapangoda'                 class=highway type=tertiary importance=0.053 -> Handapangoda - Horana Road, Poruwadanda, Ingiriya DS Division, Kalutara District, Western Province, 12440, Sri Lanka
+    HS         'Handessa'                          -> query 'Handessa'                     class=highway type=residential importance=0.053 -> Naranwala Road Handessa, Daulagala, Kandy District, Central Province, 20460, Sri Lanka
+    HZ         'Hettipola'                         -> query 'Hettipola'                    class=place type=town importance=0.072 -> Hettipola, Matale District, Central Province, Sri Lanka
+    IDH        'IDH(RSU)'                          -> query 'IDH'                          class=place type=neighbourhood importance=0.080 -> IDH (Gothatuwa), Atalgoda, Kajugahawatte, Colombo District, Western Province, 10620, Sri Lanka
+    KAL        'Kaleliya'                          -> query 'Kaleliya'                     class=highway type=primary importance=0.053 -> Kaleliya-Pallewela-Medagampitiya Road, Kukulnape, Gampaha District, Western Province, 11150, Sri Lanka
+    KIR        'Kirulapana'                        -> query 'Kirulapana'                   class=waterway type=canal importance=0.133 -> Kirulapana Canal, Colombo, Colombo District, Western Province, Sri Lanka
+    KKN        'Kekanadura'                        -> query 'Kekanadura'                   class=railway type=stop importance=0.000 -> Kekanadura, Road, Thalpawila, Matara District, Southern Province, 81020, Sri Lanka
+    KN         'Katunayaka'                        -> query 'Katunayaka'                   class=building type=yes importance=0.000 -> HGK – Hirdaramani Garment Katunayaka EFL, Katunayake-Veyangoda Road, Katunayake Export Processing Zone, Awariwatte, Andiambalama, Gampaha District, Western Province, 11558, Sri Lanka
+    KNY        'Kenniya'                           -> query 'Kenniya'                      class=office type=diplomatic importance=0.000 -> Sri Lanka High Commission, Lenana Road, Kilimani location, Kilimani ward, Kilimani division, Westlands, Nairobi, 29526, Kenya
+    KPT        'Kolpetty'                          -> query 'Kolpetty'                     class=tourism type=hotel importance=0.000 -> Kolpetty House, Charles Avenue, Bambalapitiya, Colombo, Colombo District, Western Province, 00300, Sri Lanka
+    KPY        'Kopai'                             -> query 'Kopai'                        class=amenity type=police importance=0.000 -> Kopai, Raja Road, Thirunelvely, Neerveli, Jaffna District, Northern Province, 40000, Sri Lanka
+    KSW        'Keselwatta'                        -> query 'Keselwatta'                   class=leisure type=stadium importance=0.000 -> Keselwatta Ground, Zaviya Road, Pallimulla, Panadura DS Division, Kalutara District, Western Province, 12550, Sri Lanka
+    KT         'Kaluthara'                         -> query 'Kaluthara'                    class=building type=school importance=0.000 -> Kaluthara balika national school, Cyril De Zoysa Mawatha, Kalutara, Kalutara DS Division, Kalutara District, Western Province, 12000, Sri Lanka
+    MC         'Maravila'                          -> query 'Maravila'                     class=shop type=beauty importance=0.000 -> Sashikala pharmacy maravila, Colombo-Puttalam Road, Dematapitiya Junction, Wennappuwa, Puttalam District, North Western Province, 61210, Sri Lanka
+    MD         'Maradana'                          -> query 'Maradana'                     class=railway type=station importance=0.249 -> Maradana, P. de S. Kularatne Mawatha, Panchikawatte, Maligawatte, Colombo, Colombo District, Western Province, 01000, Sri Lanka
+    MDC        'Madu Church'                       -> query 'Madu Church'                  class=amenity type=place_of_worship importance=0.000 -> Kali Kovil Authu madu, Unnichai- Pavatkodichanai Main Road, Batticaloa, Batticaloa District, Eastern Province, Sri Lanka
+    MGM        'Mathugama'                         -> query 'Mathugama'                    class=highway type=residential importance=0.053 -> Old Mathugama Road, Kandana Junction, Ballapitiya East, Madurawala DS Division, Kalutara District, Western Province, 12400, Sri Lanka
+    MOY        'Mahaoya'                           -> query 'Mahaoya'                      class=building type=residential importance=0.000 -> Mahaoya Doctors Quarters, Aralaganwila-Maha Oya Road, Maha Oya, Ampara District, Eastern Province, Sri Lanka
+    MPI        'Manipai'                           -> query 'Manipai'                      class=highway type=secondary importance=0.053 -> Manipai Kaitadi road, Kopay, Jaffna District, Northern Province, 40000, Sri Lanka
+    MQ         'Mahawa'                            -> query 'Mahawa'                       class=highway type=tertiary importance=0.053 -> Mahawa-ambanpola road, Maho, Kurunǣgala, North Western Province, 60600, Sri Lanka
+    MRG        'Monaragala'                        -> query 'Monaragala'                   class=natural type=peak importance=0.160 -> Monaragala, Moneragala, Monaragala District, Uva Province, 91000, Sri Lanka
+    MRJ        'Mirijjawila'                       -> query 'Mirijjawila'                  class=landuse type=industrial importance=0.080 -> Mirijjawila Export Promotion Zone, Hambantota, Hambantota District, Southern Province, Sri Lanka
+    MTE        'Mihintale'                         -> query 'Mihintale'                    class=natural type=peak importance=0.160 -> Eth Vehara, Mihintale, Anuradhapura District, North Central Province, 40150, Sri Lanka
+    MUP        'Mullipothanai'                     -> query 'Mullipothanai'                class=building type=yes importance=0.000 -> mullipothanai public market, Kandy Road, 98 Junction, 98 Junction - Galmetiyawa, Trincomalee District, Eastern Province, 31312, Sri Lanka
+    MUT        'Muthur'                            -> query 'Muthur'                       class=leisure type=park importance=0.080 -> Muthur, Mutur, Trincomalee District, Eastern Province, Sri Lanka
+    MV         'Mount Lavinia'                     -> query 'Mount Lavinia'                class=railway type=station importance=0.000 -> Mount Lavinia, Station Road, Ratmalana North, Ratmalana, Dehiwala, Colombo District, Western Province, 10370, Sri Lanka
+    NG         'Negambo'                           -> query 'Negambo'                      class=shop type=car_repair importance=0.000 -> Negambo Auto Parts, Colombo Road, Peradeniya, Eriyagama, Kandy District, Central Province, 20400, Sri Lanka
+    NHD        'Nachchaduwa'                       -> query 'Nachchaduwa'                  class=water type=reservoir importance=0.133 -> Nachchaduwa Tank, Nachchadoowa, Anuradhapura District, North Central Province, Sri Lanka
+    NL         'Naulla'                            -> query 'Naulla'                       class=water type=lake importance=0.133 -> Naulla Wewa, Thalawa, Ampara District, Eastern Province, Sri Lanka
+    NM         'Namunukula'                        -> query 'Namunukula'                   class=natural type=peak importance=0.160 -> Namunukula, Pelgahathenna, Badulla District, Uva Province, Sri Lanka
+    NW         'Nuwaraeliya'                       -> query 'Nuwaraeliya'                  class=tourism type=hotel importance=0.000 -> Unique View Nuwaraeliya, 60, Unique View Road, Haddon Hill, Nuwara Eliya, Nuwara Eliya District, Central Province, 22200, Sri Lanka
+    PAL        'Parliament'                        -> query 'Parliament'                   class=leisure type=park importance=0.080 -> Parliament Ground, Pitakotte East, Battaramulla South, Sri Jayewardenepura Kotte, Colombo District, Western Province, Sri Lanka
+    PH         'Panadura'                          -> query 'Panadura'                     class=railway type=platform importance=0.000 -> Panadura, Goods Shed Rd, Walana, Panadura DS Division, Kalutara District, Western Province, 12500, Sri Lanka
+    PRN        'Paranthan'                         -> query 'Paranthan'                    class=railway type=station importance=0.182 -> Paranthan, Kandy - Jaffna Road, Paranthan, Kilinochchi District, Northern Province, Sri Lanka
+    PTV        'Potuvil'                           -> query 'Potuvil'                      class=highway type=primary importance=0.053 -> Potuvil - Panama Road, Ulla, Ampara District, Eastern Province, 32500, Sri Lanka
+    PYG        'Payagala'                          -> query 'Payagala'                     class=railway type=station importance=0.000 -> Payagala North, Station Road, Beruwala DS Division, Kalutara District, Western Province, 12060, Sri Lanka
+    PYL        'Piliyandala MSU'                   -> query 'Piliyandala'                  class=leisure type=playground importance=0.000 -> Piliyandala, Ground Road, Puwakgas Junction, Kesbewa, Colombo District, Western Province, 10300, Sri Lanka
+    RL         'Raddolugama'                       -> query 'Raddolugama'                  class=highway type=tertiary importance=0.053 -> Raddolugama road, Muthuwadiya Junction, Kotugoda, Gampaha District, Western Province, 11410, Sri Lanka
+    RM         'Rathmalana'                        -> query 'Rathmalana'                   class=highway type=primary importance=0.053 -> Rathmalana-Mirihana Road, Gamsabha Junction, Gangodawila North, Kattiya Junction, Delkanda, Colombo District, Western Province, 10250, Sri Lanka
+    RMT        'Ranminitenna'                      -> query 'Ranminitenna'                 class=highway type=residential importance=0.053 -> Ranminitenna Tele Cinema Village Road, Hambantota District, Southern Province, Sri Lanka
+    RN         'Rathnapura'                        -> query 'Rathnapura'                   class=amenity type=college importance=0.000 -> Sri Lanka Institute of Tourism & Hotel Management (SLITHM) - Ratnapura, Sarath Muththettuwegama Mawatha, Ratnapura New Town, Ratnapura District, Sabaragamuwa Province, 70000, Sri Lanka
+    SIG        'Sigiriya'                          -> query 'Sigiriya'                     class=natural type=peak importance=0.160 -> Sigiriya, Ehalagala, Matale District, Central Province, 21121, Sri Lanka
+    SM         'Sammanthurai'                      -> query 'Sammanthurai'                 class=highway type=bus_stop importance=0.000 -> Sammanthurai, Karativu-Ampara Road, Sammanturai, Ampara District, Eastern Province, 32200, Sri Lanka
+    SVG        'Sevanagala'                        -> query 'Sevanagala'                   class=amenity type=school importance=0.000 -> sevanagala maha viddayalaya, habaraluva road, Monaragala District, Uva Province, 70250, Sri Lanka
+    TBL        'Thimbolketiya'                     -> query 'Thimbolketiya'                class=waterway type=river importance=0.147 -> Thimbolketiya Ganga, Timbolketiya, Ratnapura District, Sabaragamuwa Province, Sri Lanka
+    TBT        'Tambuttegama'                      -> query 'Tambuttegama'                 class=highway type=primary importance=0.053 -> Tambuttegama-Balaluwewa Road, Helabodugama, Anuradhapura District, North Central Province, Sri Lanka
+    TNL        'Thanamalwila'                      -> query 'Thanamalwila'                 class=amenity type=bus_station importance=0.000 -> Thanamalwila, Hambantota-Wellawaya Road, Padawkema, Lunugamvehera, Monaragala District, Uva Province, Sri Lanka
+    TTY        'Thalathuoya'                       -> query 'Thalathuoya'                  class=highway type=tertiary importance=0.053 -> Thalathuoya - Kiwullinda Road, Kiwullinda, Kandy District, Central Province, 20168, Sri Lanka
+    UD         'Undugoda'                          -> query 'Undugoda'                     class=water type=reservoir importance=0.133 -> Pahala Undugoda Wewa, Kalatuwagama, Kurunǣgala, North Western Province, Sri Lanka
+    UPS        'Udupussellawa'                     -> query 'Udupussellawa'                class=amenity type=hospital importance=0.000 -> Udupussellawa Divisional Hospital, Rupaha Road, Kurupanawela, Rupaha, Nuwara Eliya District, Central Province, Sri Lanka
+    VH         'Valachchenai'                      -> query 'Valachchenai'                 class=highway type=residential importance=0.053 -> Valachchenai Road, Batticaloa District, Eastern Province, Sri Lanka
+    WK         'Warakapola'                        -> query 'Warakapola'                   class=place type=town importance=0.091 -> Warakapola, Kegalle District, Sabaragamuwa Province, 71600, Sri Lanka
+
+  FAILED (no Nominatim result, NOT written to DB):
+    AB         'Allawa'                            -> query 'Allawa, Sri Lanka'
+    AKP        'Akkarapattu'                       -> query 'Akkarapattu, Sri Lanka'
+    ANK        'Agunukolapellessa'                 -> query 'Agunukolapellessa, Sri Lanka'
+    BAK        'Batakattara'                       -> query 'Batakattara, Sri Lanka'
+    BBT        'Bambarbotuwa'                      -> query 'Bambarbotuwa, Sri Lanka'
+    BC         'Batticalo'                         -> query 'Batticalo, Sri Lanka'
+    BEW        'Bewaraliya'                        -> query 'Bewaraliya, Sri Lanka'
+    DKY        'Dehiaththakandiya'                 -> query 'Dehiaththakandiya, Sri Lanka'
+    DOL        'Dolowa'                            -> query 'Dolowa, Sri Lanka'
+    DYT        'Diyathalawa'                       -> query 'Diyathalawa, Sri Lanka'
+    EH         'Ehiliyagoda'                       -> query 'Ehiliyagoda, Sri Lanka'
+    EPA        'Eppawela'                          -> query 'Eppawela, Sri Lanka'
+    GH         'Glaha'                             -> query 'Glaha, Sri Lanka'
+    GKT        'Giradurukotte'                     -> query 'Giradurukotte, Sri Lanka'
+    GLE        'Galenbidunuwewa'                   -> query 'Galenbidunuwewa, Sri Lanka'
+    GNA        'Gangodavila'                       -> query 'Gangodavila, Sri Lanka'
+    GNP        'Gonapala'                          -> query 'Gonapala, Sri Lanka'
+    HAV        'Vilasitha Niwasa(HAV)'             -> query 'Vilasitha Niwasa, Sri Lanka'
+    HMT        'Hemmatagama'                       -> query 'Hemmatagama, Sri Lanka'
+    HN         'Higurakgoda'                       -> query 'Higurakgoda, Sri Lanka'
+    HPT        'Haputhale'                         -> query 'Haputhale, Sri Lanka'
+    HRP        'Horowpatana'                       -> query 'Horowpatana, Sri Lanka'
+    IHB        'Ihalabope'                         -> query 'Ihalabope, Sri Lanka'
+    KDY        'Kotadeniya'                        -> query 'Kotadeniya, Sri Lanka'
+    KHN        'Keselhenawa'                       -> query 'Keselhenawa, Sri Lanka'
+    KID        'Kiliwedi'                          -> query 'Kiliwedi, Sri Lanka'
+    KK         'Kochchikadde'                      -> query 'Kochchikadde, Sri Lanka'
+    KR         'Kuruvita'                          -> query 'Kuruvita, Sri Lanka'
+    KUN        'Kaluthara North'                   -> query 'Kaluthara North, Sri Lanka'
+    KWD        'Kalawanchikudy'                    -> query 'Kalawanchikudy, Sri Lanka'
+    MF         'Maratuwa MSU'                      -> query 'Maratuwa, Sri Lanka'
+    MGE        'Megahathenna'                      -> query 'Megahathenna, Sri Lanka'
+    MM         'Madolsima'                         -> query 'Madolsima, Sri Lanka'
+    MN         'Madolkele'                         -> query 'Madolkele, Sri Lanka'
+    MTG        'Maththegoda'                       -> query 'Maththegoda, Sri Lanka'
+    MUR        'Maruthalawa'                       -> query 'Maruthalawa, Sri Lanka'
+    NDP        'Nikadalupotha'                     -> query 'Nikadalupotha, Sri Lanka'
+    NE         'NortonBrige'                       -> query 'NortonBrige, Sri Lanka'
+    NF         'Nagada'                            -> query 'Nagada, Sri Lanka'
+    NGP        'Negampaha'                         -> query 'Negampaha, Sri Lanka'
+    NTV        'Ninthavur'                         -> query 'Ninthavur, Sri Lanka'
+    PDT        'Padiyathalawa'                     -> query 'Padiyathalawa, Sri Lanka'
+    PML        'Pilimathalawa'                     -> query 'Pilimathalawa, Sri Lanka'
+    POL        'Pallapola'                         -> query 'Pallapola, Sri Lanka'
+    PSG        'Pulathisigama'                     -> query 'Pulathisigama, Sri Lanka'
+    RAN        'Ranpokunugama'                     -> query 'Ranpokunugama, Sri Lanka'
+    RAW        'Ravatawatta'                       -> query 'Ravatawatta, Sri Lanka'
+    RD         'Rajakadaluwa'                      -> query 'Rajakadaluwa, Sri Lanka'
+    RKG        'Rukmalgoda'                        -> query 'Rukmalgoda, Sri Lanka'
+    RKL        'Rikiligaskada'                     -> query 'Rikiligaskada, Sri Lanka'
+    RX         'Raththota'                         -> query 'Raththota, Sri Lanka'
+    SRB        'Siribopura'                        -> query 'Siribopura, Sri Lanka'
+    STK        'Shithankarni'                      -> query 'Shithankarni, Sri Lanka'
+    SW         'Seruwila'                          -> query 'Seruwila, Sri Lanka'
+    TA         'Thambalakamam'                     -> query 'Thambalakamam, Sri Lanka'
+    TAN        'Talahena'                          -> query 'Talahena, Sri Lanka'
+    TG         'Thangalla'                         -> query 'Thangalla, Sri Lanka'
+    TJ         'Thelijjavila'                      -> query 'Thelijjavila, Sri Lanka'
+    TKV        'Thinukovil'                        -> query 'Thinukovil, Sri Lanka'
+    TLK        'Thalawakele'                       -> query 'Thalawakele, Sri Lanka'
+    TMA        'Thalemannar'                       -> query 'Thalemannar, Sri Lanka'
+    TP         'Tispane'                           -> query 'Tispane, Sri Lanka'
+    TPR        'Thoppur'                           -> query 'Thoppur, Sri Lanka'
+    TRS        'Thissamaharamaya'                  -> query 'Thissamaharamaya, Sri Lanka'
+    UDT        'Uduthuththiripitiya'               -> query 'Uduthuththiripitiya, Sri Lanka'
+    VR         'Veliweriya'                        -> query 'Veliweriya, Sri Lanka'
+    WEL        'Waverset Place(WEL)'               -> query 'Waverset Place, Sri Lanka'
+    WET        'Wetara'                            -> query 'Wetara, Sri Lanka'
+    WTM        'Wattumulla'                        -> query 'Wattumulla, Sri Lanka'
+
+--- Opmc: 38 resolved / 7 low-confidence / 3 failed (of 48 attempted) ---
+
+  LOW-CONFIDENCE (NOT written to DB, needs manual review):
+    AWOP       'Awissawella'                       -> query 'Awissawella'                  class=highway type=tertiary importance=0.053 -> Awissawella - Maniyagama - Panawala Road, Nagahahena, Rangegama, Kegalle District, Sabaragamuwa Province, Sri Lanka
+    KTOP       'Kaluthara'                         -> query 'Kaluthara'                    class=building type=school importance=0.000 -> Kaluthara balika national school, Cyril De Zoysa Mawatha, Kalutara, Kalutara DS Division, Kalutara District, Western Province, 12000, Sri Lanka
+    MDOP       'Maradana'                          -> query 'Maradana'                     class=railway type=station importance=0.249 -> Maradana, P. de S. Kularatne Mawatha, Panchikawatte, Maligawatte, Colombo, Colombo District, Western Province, 01000, Sri Lanka
+    MGOP       'Monaragala'                        -> query 'Monaragala'                   class=natural type=peak importance=0.160 -> Monaragala, Moneragala, Monaragala District, Uva Province, 91000, Sri Lanka
+    PLOP       'Piliyandala'                       -> query 'Piliyandala'                  class=leisure type=playground importance=0.000 -> Piliyandala, Ground Road, Puwakgas Junction, Kesbewa, Colombo District, Western Province, 10300, Sri Lanka
+    PNOP       'Panadura'                          -> query 'Panadura'                     class=railway type=platform importance=0.000 -> Panadura, Goods Shed Rd, Walana, Panadura DS Division, Kalutara District, Western Province, 12500, Sri Lanka
+    VAOP       'Vavunia'                           -> query 'Vavunia'                      class=landuse type=industrial importance=0.080 -> Vavunia Apparels, Vavuniya, Vavuniya District, Northern Province, Sri Lanka
+
+  FAILED (no Nominatim result, NOT written to DB):
+    HBOP       'Hambanthota'                       -> query 'Hambanthota, Sri Lanka'
+    MAOP       'Mathale'                           -> query 'Mathale, Sri Lanka'
+    TROP       'Trincomale'                        -> query 'Trincomale, Sri Lanka'
+
+  SKIPPED - non-geographic (11, not attempted):
+    CSCI       'CSC-IPTV OPMC'
+    CSCS       'CSC-SRA OPMC'
+    CSCT       'CSC-TECH OPMC'
+    CSCU       'CEN-CSC-UI'
+    DEFXXX     'DEFXXX'
+    FLT1       '121-FAULTS'
+    INTN       'INT-NW-SYSADMIN'
+    NESF       'NET-SF-VOICE'
+    NOLA       'NOC-NETFM-LTE-ACC'
+    NOLC       'NOC-NETFM-LTE-CN'
+    SLHQ       'SLT Headquarters'
+
+  SKIPPED - flagged for human confirmation (3, not attempted, see QA_Compliance_Consolidated_Report.md H1 entries):
+    HKOP       'Havelock Town'
+    HROP       'Horana'
+    SIERRA     'SIERRA'
+
+====================================================================================================

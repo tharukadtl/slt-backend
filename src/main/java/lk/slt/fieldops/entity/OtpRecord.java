@@ -16,7 +16,7 @@ public class OtpRecord {
     @Column(name = "phone_number", nullable = false, length = 20)
     private String phoneNumber;
 
-    @Column(name = "otp_code", nullable = false, length = 6)
+    @Column(name = "otp_code", nullable = false, length = 100)
     private String otpCode;
 
     @Enumerated(EnumType.STRING)

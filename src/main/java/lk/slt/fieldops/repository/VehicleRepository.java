@@ -15,9 +15,9 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
     boolean existsByRegistrationNumber(String registrationNumber);
 
-    List<Vehicle> findByBranchId(Long branchId);
+    List<Vehicle> findByOpmcId(Long opmcId);
 
-    List<Vehicle> findByBranchIdAndStatus(Long branchId, Vehicle.VehicleStatus status);
+    List<Vehicle> findByOpmcIdAndStatus(Long opmcId, Vehicle.VehicleStatus status);
 
     /**
      * EXPIRY ALERT — FR-42

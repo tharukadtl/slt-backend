@@ -39,7 +39,7 @@ public class ReportResponseDTO {
         private String technicianId;
         private String technicianName;
         private String phone;
-        private String branchName;
+        private String opmcName;
         private long totalJobsAssigned;
         private long jobsCompleted;
         private long jobsInProgress;
@@ -72,6 +72,21 @@ public class ReportResponseDTO {
         private long totalPaymentsPending;
         private double approvalRate;
         private List<CategoryBreakdownDTO> categoryBreakdown;
+        private List<CategoryBreakdownDTO> technicianBreakdown;
+        private List<CategoryBreakdownDTO> opmcBreakdown;
+        private List<RejectedPaymentDTO> rejectedPayments;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class RejectedPaymentDTO {
+        private String paymentNumber;
+        private String technicianName;
+        private double amount;
+        private String reason;
+        private LocalDateTime rejectedAt;
     }
 
     // ─── Category Breakdown ───────────────────────────────
@@ -115,6 +130,194 @@ public class ReportResponseDTO {
         private String technicianName;
         private double avgScore;
         private long totalRatings;
+    }
+
+    // ─── REP-01: Daily Fault Summary ──────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DailyFaultSummaryDTO {
+        private long totalFaults;
+        private List<CategoryBreakdownDTO> byCategory;
+        private List<CategoryBreakdownDTO> byStatus;
+        private double avgResolutionTimeHours;
+        private List<WorkloadDTO> technicianWorkload;
+        private List<GeoDistributionDTO> geographicDistribution;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class WorkloadDTO {
+        private String technicianId;
+        private String technicianName;
+        private long assignedFaults;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class GeoDistributionDTO {
+        private String region;
+        private long faultCount;
+    }
+
+    // ─── REP-03: Fault Aging ───────────────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class FaultAgingItemDTO {
+        private Long faultId;
+        private String faultNumber;
+        private String category;
+        private String status;
+        private String priority;
+        private double ageHours;
+        private String ageBucket;          // 0-24H | 24-48H | 48-72H | 72H+
+        private String assignedTechnician;
+        private LocalDateTime lastStatusUpdate;
+        private boolean escalated;
+    }
+
+    // ─── REP-05: Material Cost ─────────────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MaterialCostReportDTO {
+        private double totalFocCost;
+        private double totalChargeableCost;
+        private List<MaterialUsageSummaryDTO> mostUsedMaterials;
+        private List<MaterialUsageSummaryDTO> wastageAndDamage;
+        private List<ReorderEstimateDTO> reorderEstimates;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class MaterialUsageSummaryDTO {
+        private Long materialId;
+        private String materialName;
+        private double totalQuantity;
+        private double totalCost;
+        private long usageCount;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ReorderEstimateDTO {
+        private Long materialId;
+        private String materialName;
+        private double currentStock;
+        private double minimumThreshold;
+        private int reorderQuantity;
+        private double estimatedCost;
+    }
+
+    // ─── REP-06: AI Forecast ────────────────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ForecastPointDTO {
+        private String date;
+        private double predictedFaults;
+        private double lowerBound;
+        private double upperBound;
+        private boolean isForecast;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AiForecastReportDTO {
+        private List<ForecastPointDTO> historical;
+        private List<ForecastPointDTO> forecast;
+        private double accuracy;
+        private double mae;
+        private double rmse;
+        private String dataSource;
+    }
+
+    // ─── REP-07: Geographic Demand ───────────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class GeoClusterDTO {
+        private int clusterId;
+        private String regionName;
+        private long faultCount;
+        private String riskLevel;
+        private Double centroidLat;
+        private Double centroidLng;
+        private String topCategory;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class GeographicDemandReportDTO {
+        private List<GeoClusterDTO> clusters;
+        private long totalFaults;
+        private String dataSource;
+    }
+
+    // ─── REP-08: KPI Performance ────────────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class KpiReportEntryDTO {
+        private String technicianId;
+        private String technicianName;
+        private double overallScore;
+        private double starRating;
+        private int rank;
+        private String badge;              // GOLD | SILVER | BRONZE | null
+        private int targetsAchieved;
+        private int totalTargets;
+    }
+
+    // ─── REP-09: Attendance ─────────────────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AttendanceReportItemDTO {
+        private String userId;
+        private String userName;
+        private String date;
+        private LocalDateTime checkInTime;
+        private Double checkInLatitude;
+        private Double checkInLongitude;
+        private LocalDateTime checkOutTime;
+        private Double checkOutLatitude;
+        private Double checkOutLongitude;
+        private Double workingHours;
+        private boolean absent;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AttendanceSummaryDTO {
+        private String userId;
+        private String userName;
+        private long presentDays;
+        private long absentDays;
+        private double attendanceRate;
+        private double avgWorkingHours;
     }
 
     // ─── REP-10: Audit Trail ───────────────────────────────

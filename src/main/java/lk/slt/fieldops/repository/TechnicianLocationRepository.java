@@ -23,11 +23,19 @@ public interface TechnicianLocationRepository
     @Query("SELECT t FROM TechnicianLocation t WHERE t.user.id = :userId AND t.isActive = true ORDER BY t.lastUpdated DESC")
     Optional<TechnicianLocation> findActiveByUserId(@Param("userId") Long userId);
 
+    /**
+     * The technician's most recent location row regardless of {@code is_active} — used by the
+     * location upsert so a GPS ping updates the existing row in place instead of inserting a new
+     * one. Limited to the first result because dev data may still contain duplicate rows created
+     * before {@code updateLocation} became an upsert.
+     */
+    Optional<TechnicianLocation> findFirstByUser_IdOrderByLastUpdatedDesc(Long userId);
+
     @Query("SELECT t FROM TechnicianLocation t WHERE t.isActive = true AND t.lastUpdated >= :since ORDER BY t.lastUpdated DESC")
     List<TechnicianLocation> findRecentlyActive(@Param("since") LocalDateTime since);
 
-    @Query("SELECT t FROM TechnicianLocation t WHERE t.user.branchId = :branchId AND t.isActive = true ORDER BY t.lastUpdated DESC")
-    List<TechnicianLocation> findActiveByBranchId(@Param("branchId") Long branchId);
+    @Query("SELECT t FROM TechnicianLocation t WHERE t.user.opmcId = :opmcId AND t.isActive = true ORDER BY t.lastUpdated DESC")
+    List<TechnicianLocation> findActiveByOpmcId(@Param("opmcId") Long opmcId);
 
     @Query(value = "SELECT * FROM technician_locations t WHERE t.is_active = true AND " +
             "(6371 * acos(cos(radians(:lat)) * cos(radians(t.latitude)) * " +

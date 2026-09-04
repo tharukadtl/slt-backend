@@ -3,8 +3,10 @@ package lk.slt.fieldops.controller;
 import jakarta.validation.Valid;
 import lk.slt.fieldops.dto.AuthResponse;
 import lk.slt.fieldops.dto.ClientRegisterRequest;
+import lk.slt.fieldops.dto.OtpLoginRequest;
 import lk.slt.fieldops.dto.OtpVerifyRequest;
 import lk.slt.fieldops.dto.PasswordLoginRequest;
+import lk.slt.fieldops.dto.RefreshTokenRequest;
 import lk.slt.fieldops.service.AuthService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,14 +32,10 @@ public class AuthController {
     }
 
     @PostMapping("/otp/send")
-    public ResponseEntity<Map<String, Object>> sendOtp(@RequestBody Map<String, String> body) {
-        String phoneNumber = body.get("phoneNumber");
-        if (phoneNumber == null || phoneNumber.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "phoneNumber is required"));
-        }
-        authService.sendOtp(phoneNumber);
+    public ResponseEntity<Map<String, Object>> sendOtp(@Valid @RequestBody OtpLoginRequest request) {
+        authService.sendOtp(request.getPhoneNumber());
         return ResponseEntity.ok(Map.of(
-            "message", "OTP sent successfully",
+            "message", "A 6-digit OTP has been sent to " + request.getPhoneNumber() + ".",
             "expiresIn", 5
         ));
     }
@@ -53,12 +51,8 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<AuthResponse> refresh(@RequestBody Map<String, String> body) {
-        String refreshToken = body.get("refreshToken");
-        if (refreshToken == null || refreshToken.isBlank()) {
-            return ResponseEntity.badRequest().body(null);
-        }
-        return ResponseEntity.ok(authService.refreshToken(refreshToken));
+    public ResponseEntity<AuthResponse> refresh(@Valid @RequestBody RefreshTokenRequest body) {
+        return ResponseEntity.ok(authService.refreshToken(body.getRefreshToken()));
     }
 
     @PostMapping("/logout")

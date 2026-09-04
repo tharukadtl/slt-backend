@@ -22,8 +22,8 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
     @Query("SELECT m FROM Material m WHERE m.categoryId = :categoryId AND m.isActive = true ORDER BY m.name ASC")
     List<Material> findByCategoryId(@Param("categoryId") Long categoryId);
 
-    @Query("SELECT m FROM Material m WHERE m.branchId = :branchId AND m.isActive = true ORDER BY m.name ASC")
-    List<Material> findByBranchIdAndIsActiveTrue(@Param("branchId") Long branchId);
+    @Query("SELECT m FROM Material m WHERE m.opmcId = :opmcId AND m.isActive = true ORDER BY m.name ASC")
+    List<Material> findByOpmcIdAndIsActiveTrue(@Param("opmcId") Long opmcId);
 
     @Query("SELECT m FROM Material m WHERE m.isActive = true AND LOWER(m.name) LIKE LOWER(CONCAT('%', :keyword, '%')) ORDER BY m.name ASC")
     List<Material> searchByName(@Param("keyword") String keyword);
@@ -31,14 +31,21 @@ public interface MaterialRepository extends JpaRepository<Material, Long> {
     @Query("SELECT m FROM Material m WHERE m.isActive = true AND m.currentStock <= m.minimumThreshold ORDER BY m.currentStock ASC")
     List<Material> findLowStockMaterials();
 
-    @Query("SELECT m FROM Material m WHERE m.branchId = :branchId AND m.isActive = true AND m.currentStock <= m.minimumThreshold ORDER BY m.currentStock ASC")
-    List<Material> findLowStockByBranch(@Param("branchId") Long branchId);
+    @Query("SELECT m FROM Material m WHERE m.opmcId = :opmcId AND m.isActive = true AND m.currentStock <= m.minimumThreshold ORDER BY m.currentStock ASC")
+    List<Material> findLowStockByOpmc(@Param("opmcId") Long opmcId);
 
     @Query("SELECT m FROM Material m WHERE m.isActive = true AND m.currentStock = 0 ORDER BY m.name ASC")
     List<Material> findOutOfStock();
 
-    @Query("SELECT m FROM Material m WHERE m.isActive = true AND LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(m.sku) LIKE LOWER(CONCAT('%', :search, '%')) ORDER BY m.name ASC")
+    @Query("SELECT m FROM Material m WHERE m.isActive = true AND " +
+           "(LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(m.sku) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+           "ORDER BY m.name ASC")
     List<Material> searchByNameOrSku(@Param("search") String search);
+
+    @Query("SELECT m FROM Material m WHERE m.isActive = true AND m.categoryId = :categoryId AND " +
+           "(LOWER(m.name) LIKE LOWER(CONCAT('%', :search, '%')) OR LOWER(m.sku) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+           "ORDER BY m.name ASC")
+    List<Material> searchByNameOrSkuAndCategory(@Param("search") String search, @Param("categoryId") Long categoryId);
 
     @Query("SELECT COUNT(m) FROM Material m WHERE m.isActive = true AND m.currentStock <= m.minimumThreshold")
     long countLowStock();

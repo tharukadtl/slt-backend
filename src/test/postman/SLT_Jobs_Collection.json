@@ -1,0 +1,186 @@
+{
+  "info": {
+    "_postman_id": "b6a1f2c4-0f2a-4a5e-9d4b-3c7e1a2b8d51",
+    "name": "SLT_Jobs_Collection",
+    "description": "JOB-017 (03_JOB_LIFECYCLE, FR-8) — job status lifecycle via Newman.\n\nRun:\n  newman run fieldops/src/test/postman/SLT_Jobs_Collection.json \\\n    --env-var baseUrl=http://localhost:8080 \\\n    --env-var techToken=<technician JWT> \\\n    --env-var jobId=<a PENDING job assigned to that technician>\n\nNOTE ON THE STATUS VOCABULARY: the sheet writes the starting status as ASSIGNED and goes straight\nACCEPTED -> IN_PROGRESS. Job.JobStatus has no ASSIGNED constant (a dispatched job is PENDING;\nASSIGNED is a Fault status), and JobService.validateJobTransition requires\nACCEPTED -> TRAVELLING -> IN_PROGRESS. This collection therefore drives the real machine.\n\nAlso note COMPLETED requires completionPhotoUrls — the server rejects a completion with no\nafter-service photo (JOB-007).\n\nnewman is not installed in this environment and nothing listens on :8080, so this collection cannot\nproduce a verdict here. Its executable twin is\nfieldops/src/test/java/lk/slt/fieldops/controller/SltJobsCollectionTest.java, which asserts exactly\nthe same things through MockMvc against the real database.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Full_Lifecycle_ASSIGNED_To_COMPLETED",
+      "item": [
+        {
+          "name": "1. PATCH -> ACCEPTED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 ACCEPTED', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('ACCEPTED');",
+                  "});",
+                  "pm.test('acceptedAt stamped', function () {",
+                  "    pm.expect(pm.response.json().acceptedAt).to.not.eql(null);",
+                  "});",
+                  "pm.environment.set('jobStatus', pm.response.json().status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{techToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\"status\":\"ACCEPTED\"}"},
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jobs", "{{jobId}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "2. PATCH -> TRAVELLING",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 TRAVELLING', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('TRAVELLING');",
+                  "});",
+                  "pm.environment.set('jobStatus', pm.response.json().status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{techToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\"status\":\"TRAVELLING\"}"},
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jobs", "{{jobId}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "3. PATCH -> IN_PROGRESS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 IN_PROGRESS', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('IN_PROGRESS');",
+                  "});",
+                  "pm.test('startedAt stamped', function () {",
+                  "    pm.expect(pm.response.json().startedAt).to.not.eql(null);",
+                  "});",
+                  "pm.environment.set('jobStatus', pm.response.json().status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{techToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\"status\":\"IN_PROGRESS\"}"},
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jobs", "{{jobId}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "4. PATCH -> COMPLETED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status updated', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().status).to.eql('COMPLETED');",
+                  "});",
+                  "pm.test('completedAt stamped', function () {",
+                  "    pm.expect(pm.response.json().completedAt).to.not.eql(null);",
+                  "});",
+                  "pm.environment.set('jobStatus', pm.response.json().status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{techToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"status\":\"COMPLETED\",\"causeOfFault\":\"Damaged drop wire\",\"completionRemarks\":\"Replaced 15m cable, tested OK\",\"completionPhotoUrls\":\"/uploads/photos/after-1.jpg\"}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jobs", "{{jobId}}", "status"]
+            }
+          }
+        },
+        {
+          "name": "5. PATCH -> IN_PROGRESS (must be refused)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 on back-transition from COMPLETED', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.json().message).to.include('Invalid job transition');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {"key": "Authorization", "value": "Bearer {{techToken}}"},
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {"mode": "raw", "raw": "{\"status\":\"IN_PROGRESS\"}"},
+            "url": {
+              "raw": "{{baseUrl}}/api/jobs/{{jobId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jobs", "{{jobId}}", "status"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "baseUrl", "value": "http://localhost:8080"},
+    {"key": "techToken", "value": ""},
+    {"key": "jobId", "value": ""}
+  ]
+}

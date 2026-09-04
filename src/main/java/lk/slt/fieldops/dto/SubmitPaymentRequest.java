@@ -1,6 +1,7 @@
 package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -35,6 +36,8 @@ public class SubmitPaymentRequest {
 
     private String     customerSignatureUrl;
     private String     jobPhotosUrls;
+
+    @Size(max = 500, message = "Justification must not exceed 500 characters")
     private String     materialJustification;
     private String     workSummary;
 

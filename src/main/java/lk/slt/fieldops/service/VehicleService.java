@@ -2,8 +2,10 @@ package lk.slt.fieldops.service;
 
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
 import lk.slt.fieldops.dto.CreateVehicleRequest;
+import lk.slt.fieldops.entity.User;
 import lk.slt.fieldops.entity.Vehicle;
 import lk.slt.fieldops.entity.VehicleAssignment;
+import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.repository.VehicleAssignmentRepository;
 import lk.slt.fieldops.repository.VehicleRepository;
 import org.springframework.stereotype.Service;
@@ -19,7 +21,7 @@ import java.util.Map;
  * Methods:
  *   createVehicle()          → Admin adds a vehicle
  *   updateVehicle()          → Admin updates vehicle details
- *   getById() / getByBranch()→ Read methods
+ *   getById() / getByOpmc()  → Read methods
  *   assignVehicle()          → Called at BOD — one vehicle per TL per day
  *   closeAssignment()        → Called at EOD — calculates distance
  *   getExpiryAlerts()        → Insurance/license expiring within 30 days
@@ -32,11 +34,14 @@ public class VehicleService {
 
     private final VehicleRepository           vehicleRepo;
     private final VehicleAssignmentRepository assignmentRepo;
+    private final UserRepository              userRepo;
 
     public VehicleService(VehicleRepository vehicleRepo,
-                          VehicleAssignmentRepository assignmentRepo) {
+                          VehicleAssignmentRepository assignmentRepo,
+                          UserRepository userRepo) {
         this.vehicleRepo    = vehicleRepo;
         this.assignmentRepo = assignmentRepo;
+        this.userRepo       = userRepo;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -71,13 +76,13 @@ public class VehicleService {
     }
 
     @Transactional(readOnly = true)
-    public List<Vehicle> getByBranch(Long branchId) {
-        return vehicleRepo.findByBranchId(branchId);
+    public List<Vehicle> getByOpmc(Long opmcId) {
+        return vehicleRepo.findByOpmcId(opmcId);
     }
 
     @Transactional(readOnly = true)
-    public List<Vehicle> getActiveByBranch(Long branchId) {
-        return vehicleRepo.findByBranchIdAndStatus(branchId, Vehicle.VehicleStatus.AVAILABLE);
+    public List<Vehicle> getActiveByOpmc(Long opmcId) {
+        return vehicleRepo.findByOpmcIdAndStatus(opmcId, Vehicle.VehicleStatus.AVAILABLE);
     }
 
     @Transactional
@@ -88,6 +93,26 @@ public class VehicleService {
         } catch (IllegalArgumentException e) {
             throw new RuntimeException("Invalid status: " + status +
                 ". Valid: AVAILABLE, IN_USE, UNDER_REPAIR, INACTIVE");
+        }
+        return vehicleRepo.save(v);
+    }
+
+    /**
+     * Admin-initiated assignment of a vehicle to a technician (distinct from the
+     * automatic daily BOD/EOD Team-Lead rotation in VehicleAssignment below).
+     * Pass technicianId=null to unassign.
+     */
+    @Transactional
+    public Vehicle assignTechnician(Long vehicleId, Long technicianId) {
+        Vehicle v = findOrThrow(vehicleId);
+        if (technicianId == null) {
+            v.setAssignedTechnicianId(null);
+            v.setAssignedTechnicianName(null);
+        } else {
+            User technician = userRepo.findById(technicianId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + technicianId));
+            v.setAssignedTechnicianId(technician.getId());
+            v.setAssignedTechnicianName(technician.getFullName());
         }
         return vehicleRepo.save(v);
     }
@@ -228,13 +253,14 @@ public class VehicleService {
         v.setMake(req.getMake());
         v.setModel(req.getModel());
         v.setModelYear(req.getModelYear());
-        v.setBranchId(req.getBranchId());
+        v.setOpmcId(req.getOpmcId());
         v.setInsuranceExpiry(req.getInsuranceExpiry());
         v.setRevenueLicenseExpiry(req.getRevenueLicenseExpiry());
         v.setEmissionTestExpiry(req.getEmissionTestExpiry());
         v.setInsuranceCompany(req.getInsuranceCompany());
         v.setInsurancePolicyNumber(req.getInsurancePolicyNumber());
         v.setNotes(req.getNotes());
+        v.setNextServiceDate(req.getNextServiceDate());
 
         if (req.getCurrentOdometer() != null) {
             v.setCurrentOdometer(req.getCurrentOdometer());

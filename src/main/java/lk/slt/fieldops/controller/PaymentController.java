@@ -10,6 +10,7 @@ import lk.slt.fieldops.entity.PaymentApproval;
 import lk.slt.fieldops.entity.User;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.service.PaymentService;
+import lk.slt.fieldops.shared.OpmcAccessGuard;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,7 +26,7 @@ import java.util.stream.Collectors;
  * POST   /api/payments                  TL submits payment
  * GET    /api/payments/{id}             Get one payment
  * GET    /api/payments/pending          Admin: queue to review
- * GET    /api/payments/branch/{id}      Branch payment history
+ * GET    /api/payments/opmc/{id}        OPMC payment history
  * GET    /api/payments/my               TL: my submitted payments
  * GET    /api/payments/customer/{id}    Customer billing history
  * GET    /api/payments/my-bills         Client: my bills (ClientBillDTO)
@@ -40,10 +41,13 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final UserRepository userRepo;
+    private final OpmcAccessGuard opmcGuard;
 
-    public PaymentController(PaymentService paymentService, UserRepository userRepo) {
+    public PaymentController(PaymentService paymentService, UserRepository userRepo,
+                              OpmcAccessGuard opmcGuard) {
         this.paymentService = paymentService;
         this.userRepo       = userRepo;
+        this.opmcGuard      = opmcGuard;
     }
 
     private String resolveFullName(Long userId) {
@@ -63,26 +67,30 @@ public class PaymentController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
-    public ResponseEntity<Payment> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(paymentService.getById(id));
+    public ResponseEntity<Payment> getById(@PathVariable Long id, @AuthenticationPrincipal Long callerId) {
+        Payment payment = paymentService.getById(id);
+        opmcGuard.assertSameOpmc(payment.getOpmcId(), callerId);
+        return ResponseEntity.ok(payment);
     }
 
     @GetMapping("/pending")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<Payment>> getPending() {
-        return ResponseEntity.ok(paymentService.getPendingPayments());
+    public ResponseEntity<List<Payment>> getPending(@AuthenticationPrincipal Long callerId) {
+        return ResponseEntity.ok(paymentService.getPendingPayments(opmcGuard.resolveOpmcFilter(callerId)));
     }
 
     @GetMapping("/all")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<Payment>> getAll() {
-        return ResponseEntity.ok(paymentService.getAll());
+    public ResponseEntity<List<Payment>> getAll(@AuthenticationPrincipal Long callerId) {
+        return ResponseEntity.ok(paymentService.getAll(opmcGuard.resolveOpmcFilter(callerId)));
     }
 
-    @GetMapping("/branch/{branchId}")
+    @GetMapping("/opmc/{opmcId}")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<Payment>> getByBranch(@PathVariable Long branchId) {
-        return ResponseEntity.ok(paymentService.getByBranch(branchId));
+    public ResponseEntity<List<Payment>> getByOpmc(@PathVariable Long opmcId,
+                                                    @AuthenticationPrincipal Long callerId) {
+        opmcGuard.assertSameOpmc(opmcId, callerId);
+        return ResponseEntity.ok(paymentService.getByOpmc(opmcId));
     }
 
     @GetMapping("/my")
@@ -133,6 +141,7 @@ public class PaymentController {
             @PathVariable Long id,
             @Valid @RequestBody ReviewPaymentRequest request,
             @AuthenticationPrincipal Long adminId) {
+        opmcGuard.assertSameOpmc(paymentService.getById(id).getOpmcId(), adminId);
         return ResponseEntity.ok(
             paymentService.reviewPayment(id, request, adminId, resolveFullName(adminId)));
     }
@@ -144,13 +153,16 @@ public class PaymentController {
             @PathVariable Long id,
             @Valid @RequestBody AmendBillRequest request,
             @AuthenticationPrincipal Long adminId) {
+        opmcGuard.assertSameOpmc(paymentService.getById(id).getOpmcId(), adminId);
         return ResponseEntity.ok(
             paymentService.amendBill(id, request, adminId, resolveFullName(adminId)));
     }
 
     @GetMapping("/{id}/approvals")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<PaymentApproval>> getApprovals(@PathVariable Long id) {
+    public ResponseEntity<List<PaymentApproval>> getApprovals(@PathVariable Long id,
+                                                                @AuthenticationPrincipal Long callerId) {
+        opmcGuard.assertSameOpmc(paymentService.getById(id).getOpmcId(), callerId);
         return ResponseEntity.ok(paymentService.getApprovalHistory(id));
     }
 }

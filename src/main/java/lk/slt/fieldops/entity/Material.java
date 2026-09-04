@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @Table(name = "materials",
         indexes = {
                 @Index(name = "idx_material_sku",   columnList = "sku",       unique = true),
-                @Index(name = "idx_material_branch", columnList = "branch_id"),
+                @Index(name = "idx_material_opmc", columnList = "opmc_id"),
                 @Index(name = "idx_material_stock",  columnList = "stock_status")
         })
 @Data
@@ -32,8 +32,8 @@ public class Material {
     @Column(name = "category_id")
     private Long categoryId;
 
-    @Column(name = "branch_id")
-    private Long branchId;
+    @Column(name = "opmc_id")
+    private Long opmcId;
 
     @Column(name = "name", nullable = false, length = 200)
     private String name;
@@ -43,6 +43,20 @@ public class Material {
 
     @Column(name = "description", length = 500)
     private String description;
+
+    // Cause/Material hierarchy import (2026-08-21): richer WFMS material metadata,
+    // additive/nullable — the 2 pre-existing app-seeded rows get NULL in all four.
+    @Column(name = "erp_code", length = 50)
+    private String erpCode;
+
+    @Column(name = "erp_description", length = 300)
+    private String erpDescription;
+
+    @Column(name = "brand", length = 100)
+    private String brand;
+
+    @Column(name = "measurement_code", length = 10)
+    private String measurementCode;
 
     @Column(name = "unit", length = 20)
     @Builder.Default
@@ -98,10 +112,29 @@ public class Material {
         if (sku == null) {
             sku = "MAT-" + System.currentTimeMillis();
         }
+        stockStatus = computeStockStatus(currentStock, minimumThreshold);
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+        stockStatus = computeStockStatus(currentStock, minimumThreshold);
+    }
+
+    /**
+     * Single source of truth for stock status — IN_STOCK / LOW_STOCK / OUT_OF_STOCK.
+     * Recomputed automatically on every save via @PrePersist/@PreUpdate so the
+     * persisted stockStatus column can never go stale after a stock adjustment.
+     */
+    public static StockStatus computeStockStatus(BigDecimal currentStock, BigDecimal minimumThreshold) {
+        BigDecimal stock = currentStock != null ? currentStock : BigDecimal.ZERO;
+        BigDecimal threshold = minimumThreshold != null ? minimumThreshold : BigDecimal.TEN;
+        if (stock.compareTo(BigDecimal.ZERO) <= 0) {
+            return StockStatus.OUT_OF_STOCK;
+        }
+        if (stock.compareTo(threshold) <= 0) {
+            return StockStatus.LOW_STOCK;
+        }
+        return StockStatus.IN_STOCK;
     }
 }

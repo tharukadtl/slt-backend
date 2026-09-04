@@ -58,31 +58,31 @@ public interface KpiScoreRepository
             @Param("period") String period,
             @Param("date") LocalDate date);
 
-    // ─── Find by Branch ───────────────────────────────────
+    // ─── Find by OPMC ───────────────────────────────────────
 
     @Query("SELECT ks FROM KpiScore ks "
-            + "WHERE ks.branchId = :branchId "
+            + "WHERE ks.opmcId = :opmcId "
             + "AND ks.scoreDate = :date "
             + "ORDER BY ks.overallScore DESC")
-    List<KpiScore> findByBranchIdAndScoreDate(
-            @Param("branchId") Long branchId,
+    List<KpiScore> findByOpmcIdAndScoreDate(
+            @Param("opmcId") Long opmcId,
             @Param("date") LocalDate date);
 
     @Query("SELECT ks FROM KpiScore ks "
-            + "WHERE ks.branchId = :branchId "
+            + "WHERE ks.opmcId = :opmcId "
             + "AND ks.period = :period "
             + "ORDER BY ks.overallScore DESC")
-    List<KpiScore> findByBranchIdAndPeriod(
-            @Param("branchId") Long branchId,
+    List<KpiScore> findByOpmcIdAndPeriod(
+            @Param("opmcId") Long opmcId,
             @Param("period") String period);
 
     // ─── Average Score ────────────────────────────────────
 
     @Query("SELECT AVG(ks.overallScore) "
             + "FROM KpiScore ks "
-            + "WHERE ks.branchId = :branchId "
+            + "WHERE ks.opmcId = :opmcId "
             + "AND ks.period = :period")
-    Double avgScoreByBranchAndPeriod(
-            @Param("branchId") Long branchId,
+    Double avgScoreByOpmcAndPeriod(
+            @Param("opmcId") Long opmcId,
             @Param("period") String period);
 }

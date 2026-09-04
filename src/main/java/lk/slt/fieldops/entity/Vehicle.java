@@ -43,8 +43,8 @@ public class Vehicle {
     @Column(name = "fuel_type", length = 12)
     private FuelType fuelType = FuelType.PETROL;
 
-    @Column(name = "branch_id")
-    private Long branchId;
+    @Column(name = "opmc_id")
+    private Long opmcId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -52,6 +52,16 @@ public class Vehicle {
 
     @Column(name = "current_odometer")
     private Integer currentOdometer = 0;
+
+    // ── Assignment & Maintenance ──────────────────────────────────────────────
+    @Column(name = "assigned_technician_id")
+    private Long assignedTechnicianId;
+
+    @Column(name = "assigned_technician_name", length = 150)
+    private String assignedTechnicianName;
+
+    @Column(name = "next_service_date")
+    private LocalDate nextServiceDate;
 
     // ── Document Expiry Dates (ALERT if < 30 days) ────────────────────────────
     @Column(name = "insurance_expiry")
@@ -98,9 +108,12 @@ public class Vehicle {
     public Integer       getModelYear()             { return modelYear; }
     public VehicleType   getVehicleType()           { return vehicleType; }
     public FuelType      getFuelType()              { return fuelType; }
-    public Long          getBranchId()              { return branchId; }
+    public Long          getOpmcId()                { return opmcId; }
     public VehicleStatus getStatus()                { return status; }
     public Integer       getCurrentOdometer()       { return currentOdometer; }
+    public Long          getAssignedTechnicianId()  { return assignedTechnicianId; }
+    public String        getAssignedTechnicianName(){ return assignedTechnicianName; }
+    public LocalDate     getNextServiceDate()       { return nextServiceDate; }
     public LocalDate     getInsuranceExpiry()       { return insuranceExpiry; }
     public LocalDate     getRevenueLicenseExpiry()  { return revenueLicenseExpiry; }
     public LocalDate     getEmissionTestExpiry()    { return emissionTestExpiry; }
@@ -118,9 +131,12 @@ public class Vehicle {
     public void setModelYear(Integer v)             { this.modelYear             = v; }
     public void setVehicleType(VehicleType v)       { this.vehicleType           = v; }
     public void setFuelType(FuelType v)             { this.fuelType              = v; }
-    public void setBranchId(Long v)                 { this.branchId              = v; }
+    public void setOpmcId(Long v)                   { this.opmcId                = v; }
     public void setStatus(VehicleStatus v)          { this.status                = v; }
     public void setCurrentOdometer(Integer v)       { this.currentOdometer       = v; }
+    public void setAssignedTechnicianId(Long v)     { this.assignedTechnicianId  = v; }
+    public void setAssignedTechnicianName(String v) { this.assignedTechnicianName = v; }
+    public void setNextServiceDate(LocalDate v)     { this.nextServiceDate       = v; }
     public void setInsuranceExpiry(LocalDate v)     { this.insuranceExpiry       = v; }
     public void setRevenueLicenseExpiry(LocalDate v){ this.revenueLicenseExpiry  = v; }
     public void setEmissionTestExpiry(LocalDate v)  { this.emissionTestExpiry    = v; }

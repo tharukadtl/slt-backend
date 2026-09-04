@@ -60,8 +60,9 @@ public class NotificationController {
     }
 
     @PatchMapping("/{id}/read")
-    public ResponseEntity<NotificationDTO> markOneRead(@PathVariable Long id) {
-        return ResponseEntity.ok(notificationService.markOneRead(id));
+    public ResponseEntity<NotificationDTO> markOneRead(
+            @PathVariable Long id, @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(notificationService.markOneRead(id, userId));
     }
 
     @PostMapping("/push")

@@ -1,0 +1,174 @@
+# src/test/resources/application.yml — every `mvn test` run, local and CI alike, uses this file
+# instead of src/main/resources/application.yml (test-classes precedes classes on the test
+# classpath, so this file shadows the main one completely, not a layered override — hence it is a
+# full copy of the main config, not a partial diff). The intentional differences from the main file:
+# spring.datasource points at an ephemeral, real MySQL Testcontainers instance instead of the
+# persistent local dev database; app.jwt.secret is a literal test-only value instead of a required
+# env var, so `mvn test` needs zero environment setup, locally or in CI; and spring.sql.init below
+# auto-applies migrations/auto/*.sql against that fresh instance — see migrations/README.md for what
+# belongs there (vs. migrations/manual/, never auto-applied) and why continue-on-error is safe here.
+#
+# CI-portable database investigation, QA_Compliance_Consolidated_Report.md, 2026-09-02 — confirmed
+# decision: Testcontainers is the default for ALL test runs, not a CI-only opt-in.
+spring:
+  datasource:
+    url: jdbc:tc:mysql:8.0:///slt_fieldops_db_test
+    username: test
+    password: test
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+
+  jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+    # Run after ddl-auto builds the base schema from the entity mappings, not before — migrations/
+    # auto/*.sql alters tables ddl-auto has to have created first.
+    defer-datasource-initialization: true
+
+  sql:
+    init:
+      # Testcontainers' JDBC URL isn't Boot's notion of "embedded" (H2/HSQL) — the default
+      # (embedded-only) would silently skip this folder entirely without this.
+      mode: always
+      # Safe here specifically because migrations/auto/*.sql is held to the convention that every
+      # statement's only possible re-application error is "already exists" (see migrations/README.md)
+      # — a real syntax/logic error in a script here would also be swallowed, so that convention is
+      # load-bearing, not a formality. Needed because this suite's many distinct Spring context caches
+      # each re-trigger datasource initialization against the SAME shared Testcontainers database; the
+      # first context applies the file for real, every later one hits a harmless duplicate-* error.
+      continue-on-error: true
+      schema-locations: file:migrations/auto/*.sql
+
+  jackson:
+    time-zone: Asia/Colombo
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  websocket:
+    message-size-limit: 8192
+    send-buffer-size-limit: 512000
+    send-time-limit: 20000
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  jwt:
+    # Test-only literal secret — this file is never packaged into the application JAR (test scope),
+    # so there is no production-secret-leak risk. Matches application-local.yml's existing value so
+    # tokens created by JwtTokenProvider behave identically to every local run this session has done.
+    secret: SLT-FieldOps-JWT-Secret-Key-2026-LLCSX25311-Tharuka-Very-Long-Secure-Key-Min-64-Chars
+    access-token-expiry-ms: ${JWT_EXPIRATION_MS:1800000}
+    refresh-token-expiry-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000}
+
+  otp:
+    expiry-minutes: 5
+    max-attempts: 3
+    resend-cooldown-seconds: 60
+    rate-limit-window-minutes: 10
+    rate-limit-max-requests: 3
+    account-lock-minutes: 15
+
+  sms:
+    enabled: false
+
+  rate-limit:
+    max-requests-per-minute: 100
+    provider: mock
+
+  firebase:
+    credentials-path: ${FIREBASE_CREDENTIALS_PATH:src/main/resources/firebase/serviceAccountKey.json}
+    enabled: false
+    project-id: ${FIREBASE_PROJECT_ID:slt-fieldops}
+
+  websocket:
+    location-endpoint: /ws/location
+    notification-endpoint: /ws/notifications
+    allowed-origins: "*"
+
+  cors:
+    allowed-origins:
+      - ${ALLOWED_ORIGINS:http://localhost:3000}
+      - http://localhost:3001
+      - http://localhost:8081
+      - http://localhost:19000
+      - http://localhost:19001
+      - http://10.0.2.2:8080
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
+      - OPTIONS
+    allowed-headers: "*"
+    allow-credentials: true
+    max-age: 3600
+
+  stock:
+    low-stock-check-interval-minutes: 30
+    alert-enabled: true
+
+  reports:
+    export-dir: temp/reports
+    max-export-days: 90
+
+  ai:
+    base-url: ${AI_MODULE_URL:http://localhost:5000}
+
+  uploads:
+    dir: uploads
+
+  location:
+    active-threshold-minutes: 30
+    update-interval-seconds: 30
+
+logging:
+  level:
+    lk.slt.fieldops: DEBUG
+    lk.slt.fieldops.websocket: DEBUG
+    lk.slt.fieldops.service: DEBUG
+    lk.slt.fieldops.controller: INFO
+    org.springframework.security: INFO
+    org.springframework.web.socket: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/slt-fieldops-test.log
+    max-size: 10MB
+    max-history: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, env
+  endpoint:
+    health:
+      show-details: always
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: SLT Field Operations System
+    version: 1.0.0
+    description: >
+      SLT After-Service Issue Management
+      and Field Operations System
+    student: Tharuka Liyanaarachchi
+    id: LLCSX25311
+  contact:
+    email: support@slt.lk
+    phone: +94 11 2300000

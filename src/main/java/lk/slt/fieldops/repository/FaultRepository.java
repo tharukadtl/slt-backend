@@ -21,23 +21,57 @@ public interface FaultRepository
     List<Fault> findByStatus(
             @Param("status") Fault.FaultStatus status);
 
-    // ─── Find by Branch + Status (ordered by priority then reported) ──
+    // ─── Find by optional Status + Category (admin list filter) ──────
+    // Both parameters are optional: a NULL parameter disables that predicate,
+    // so passing neither returns every fault, one narrows on that one, and
+    // both are AND-ed. Filtering happens in the database, not in memory.
 
     @Query("SELECT f FROM Fault f "
-            + "WHERE f.branchId = :branchId "
+            + "WHERE (:status IS NULL OR f.status = :status) "
+            + "AND (:category IS NULL OR f.category = :category) "
+            + "ORDER BY f.reportedAt DESC")
+    List<Fault> findByOptionalStatusAndCategory(
+            @Param("status")   Fault.FaultStatus   status,
+            @Param("category") Fault.FaultCategory category);
+
+    // RES-023 — OPMC Admin's fault list must be genuinely scoped server-side
+    // (opmcId derived from the caller, never client-supplied), not merely
+    // filtered in the UI while the API stays open cross-OPMC.
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.opmcId = :opmcId "
+            + "AND (:status IS NULL OR f.status = :status) "
+            + "AND (:category IS NULL OR f.category = :category) "
+            + "ORDER BY f.reportedAt DESC")
+    List<Fault> findByOpmcIdAndOptionalStatusAndCategory(
+            @Param("opmcId")   Long                 opmcId,
+            @Param("status")   Fault.FaultStatus   status,
+            @Param("category") Fault.FaultCategory category);
+
+    // ─── Find by OPMC + Status (ordered by priority then reported) ──
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.opmcId = :opmcId "
             + "AND f.status = :status "
             + "ORDER BY f.priority ASC, f.reportedAt ASC")
-    List<Fault> findByBranchIdAndStatusOrderByPriorityAscReportedAtAsc(
-            @Param("branchId") Long branchId,
+    List<Fault> findByOpmcIdAndStatusOrderByPriorityAscReportedAtAsc(
+            @Param("opmcId") Long opmcId,
             @Param("status") Fault.FaultStatus status);
 
-    // ─── Find by Branch ───────────────────────────────────
+    // ─── Find by OPMC ───────────────────────────────────────
 
     @Query("SELECT f FROM Fault f "
-            + "WHERE f.branchId = :branchId "
+            + "WHERE f.opmcId = :opmcId "
             + "ORDER BY f.reportedAt DESC")
-    List<Fault> findByBranchIdOrderByReportedAtDesc(
-            @Param("branchId") Long branchId);
+    List<Fault> findByOpmcIdOrderByReportedAtDesc(
+            @Param("opmcId") Long opmcId);
+
+    // ─── Find by Work Group (a Team Lead's incoming queue, SRS 5.5.1) ────
+
+    @Query("SELECT f FROM Fault f "
+            + "WHERE f.workGroupId = :workGroupId "
+            + "AND f.status NOT IN ('COMPLETED', 'CANCELLED') "
+            + "ORDER BY f.priority ASC, f.reportedAt ASC")
+    List<Fault> findOpenByWorkGroupId(@Param("workGroupId") Long workGroupId);
 
     // ─── Find by Customer ─────────────────────────────────
 
@@ -119,4 +153,11 @@ public interface FaultRepository
             + "('COMPLETED', 'CANCELLED') "
             + "ORDER BY f.createdAt ASC")
     List<Fault> findHighPriorityOpen();
+
+    // ─── Uploaded-photo ownership lookup (SecurityConfig /uploads/** authorization) ──────
+    // Client-submitted evidence photos (Fault.photoUrls is a comma-joined string of
+    // "/uploads/photos/xxx.jpg" paths) — used to answer "does this Fault carry this exact
+    // photo path" without pulling every Fault into memory to check with String.contains().
+    @Query("SELECT f FROM Fault f WHERE f.photoUrls LIKE CONCAT('%', :path, '%')")
+    List<Fault> findByPhotoUrlsContaining(@Param("path") String path);
 }

@@ -1,0 +1,147 @@
+
+====================================================================================================
+H1a GEOCODING REPORT (retry pass: transliteration overrides + multi-candidate ranking)
+====================================================================================================
+
+Overall coverage — Exchange: 271/377 have coordinates. Opmc (real rows): 46/62 have coordinates.
+
+--- Exchange this run: 1 newly resolved / 51 still low-confidence / 55 still failed (of 107 retried) ---
+
+  NEWLY RESOLVED, by how: {'override': 1}
+    NG         'Negambo'                           via=override     rank=0 -> Negombo, Gampaha District, Western Province, 11500, Sri Lanka
+
+  STILL LOW-CONFIDENCE (NOT written to DB):
+    AMB        'Ambulgama'                         tried[original='Ambulgama'] top-> class=highway type=primary importance=0.053 -> Panagoda-Ambulgama Road, Henpita, Embulgama, Colombo District, Western Province, 10654, Sri Lanka
+    AND        'Andankulam'                        tried[original='Andankulam'] top-> class=building type=yes importance=0.000 -> Naval Water Purification Plant Andankulam, 2nd Lane, Sinhapura, Trincomalee District, Eastern Province, 31003, Sri Lanka
+    APK        'Ampitikanda'                       tried[original='Ampitikanda'] top-> class=highway type=unclassified importance=0.053 -> Monarakanda - Ampitikanda State Road, Maousakelie, Meeriyabedda State, Badulla District, Uva Province, 90190, Sri Lanka
+    BL         'Beliatta'                          tried[original='Beliatta'] top-> class=landuse type=farmland importance=0.080 -> Beliatta_paddy, Talahagamwaduwa, Hambantota District, Southern Province, Sri Lanka
+    BTP        'Batapola'                          tried[original='Batapola'] top-> class=highway type=primary importance=0.053 -> Kahawa-Batapola Road, Meetiyagoda, Galle District, Southern Province, 80330, Sri Lanka
+    CB         'China Bay'                         tried[original='China Bay'] top-> class=railway type=station importance=0.117 -> China Bay, Trincomalee-Batticaloa Road, Sinhapura, Trincomalee District, Eastern Province, 31003, Sri Lanka
+    CEN        'Co. Central'                       tried[original='Co. Central'] top-> class=highway type=residential importance=0.053 -> Central, Hingurakgoda, Polonnaruwa District, North Central Province, Sri Lanka
+    CHR        'Church Road'                       tried[original='Church Road'] top-> class=highway type=residential importance=0.053 -> Church Road, Simon Dale Housing SCH, Wewala, Suwarapola, Colombo District, Western Province, 10300, Sri Lanka
+    DJ         'Dunagaha'                          tried[original='Dunagaha'] top-> class=place type=village importance=0.000 -> Dunagaha, Gampaha District, Western Province, Sri Lanka
+    DOW        'Dehiovita'                         tried[original='Dehiovita'] top-> class=amenity type=townhall importance=0.000 -> Dehiovita Pradeshiya Saba Building, Yatiyantota Road, Urupelawwa, Iriyagolla, Kegalle District, Sabaragamuwa Province, 71400, Sri Lanka
+    EGD        'Egoda Uyana'                       tried[original='Egoda Uyana'] top-> class=railway type=station importance=0.000 -> Egoda Uyana, Galle Road New Deviation, Moratuwa, Colombo District, Western Province, 12550, Sri Lanka
+    EMU        'Embuldeniya'                       tried[original='Embuldeniya'] top-> class=place type=neighbourhood importance=0.080 -> Embuldeniya, Mirihana, Sri Jayewardenepura Kotte, Colombo District, Western Province, 10250, Sri Lanka
+    GMK        'Gomarankadawela'                   tried[original='Gomarankadawela'] top-> class=highway type=secondary importance=0.053 -> Ethbediwewa-Gomarankadawela road, Gomarankadawala, Trincomalee District, Eastern Province, Sri Lanka
+    GO         'Gelioya'                           tried[original='Gelioya'] top-> class=railway type=stop importance=0.000 -> Gelioya, Station Road, Daulagala, Kandy District, Central Province, 20460, Sri Lanka
+    HE         'Haliela'                           tried[original='Haliela'] top-> class=highway type=residential importance=0.053 -> Haliela Road, Lenabatuwa, Matara District, Southern Province, 81100, Sri Lanka
+    HGY        'Halgranoya'                        tried[original='Halgranoya'] top-> class=place type=locality importance=0.067 -> Halgranoya, Rathnayakapathana, Ragala, Nuwara Eliya District, Central Province, Sri Lanka
+    HLC        'Havelock City'                     tried[original='Havelock City'] top-> class=landuse type=residential importance=0.000 -> Havelock City, Elibank tower path, Wellawatte, Colombo, Colombo District, Western Province, 00006, Sri Lanka
+    HPG        'Handapangoda'                      tried[original='Handapangoda'] top-> class=highway type=tertiary importance=0.053 -> Handapangoda - Horana Road, Poruwadanda, Ingiriya DS Division, Kalutara District, Western Province, 12440, Sri Lanka
+    HS         'Handessa'                          tried[original='Handessa'] top-> class=highway type=residential importance=0.053 -> Naranwala Road Handessa, Daulagala, Kandy District, Central Province, 20460, Sri Lanka
+    IDH        'IDH(RSU)'                          tried[original='IDH'] top-> class=place type=neighbourhood importance=0.080 -> IDH (Gothatuwa), Atalgoda, Kajugahawatte, Colombo District, Western Province, 10620, Sri Lanka
+    KAL        'Kaleliya'                          tried[original='Kaleliya'] top-> class=highway type=primary importance=0.053 -> Veyangoda-Kaleliya Road, Veyangoda, Gampaha District, Western Province, 11150, Sri Lanka
+    KIR        'Kirulapana'                        tried[original='Kirulapana'] top-> class=waterway type=canal importance=0.133 -> Kirulapana Canal, Colombo, Colombo District, Western Province, Sri Lanka
+    KKN        'Kekanadura'                        tried[original='Kekanadura'] top-> class=railway type=stop importance=0.000 -> Kekanadura, Road, Thalpawila, Matara District, Southern Province, 81020, Sri Lanka
+    KN         'Katunayaka'                        tried[original='Katunayaka'] top-> class=building type=yes importance=0.000 -> HGK – Hirdaramani Garment Katunayaka EFL, Katunayake-Veyangoda Road, Katunayake Export Processing Zone, Awariwatte, Andiambalama, Gampaha District, Western Province, 11558, Sri Lanka
+    KNY        'Kenniya'                           tried[original='Kenniya'] top-> class=office type=diplomatic importance=0.000 -> Sri Lanka High Commission, Lenana Road, Kilimani location, Kilimani ward, Kilimani division, Westlands, Nairobi, 29526, Kenya
+    KPT        'Kolpetty'                          tried[original='Kolpetty'] top-> class=tourism type=hotel importance=0.000 -> Kolpetty House, Charles Avenue, Bambalapitiya, Colombo, Colombo District, Western Province, 00300, Sri Lanka
+    KPY        'Kopai'                             tried[original='Kopai'] top-> class=amenity type=police importance=0.000 -> Kopai, Raja Road, Thirunelvely, Neerveli, Jaffna District, Northern Province, 40000, Sri Lanka
+    KSW        'Keselwatta'                        tried[original='Keselwatta'] top-> class=leisure type=stadium importance=0.000 -> Keselwatta Ground, Zaviya Road, Pallimulla, Panadura DS Division, Kalutara District, Western Province, 12550, Sri Lanka
+    MC         'Maravila'                          tried[original='Maravila'] top-> class=shop type=beauty importance=0.000 -> Sashikala pharmacy maravila, Colombo-Puttalam Road, Dematapitiya Junction, Wennappuwa, Puttalam District, North Western Province, 61210, Sri Lanka
+    MDC        'Madu Church'                       tried[original='Madu Church'] top-> class=amenity type=place_of_worship importance=0.000 -> Kali Kovil Authu madu, Unnichai- Pavatkodichanai Main Road, Batticaloa, Batticaloa District, Eastern Province, Sri Lanka
+    MOY        'Mahaoya'                           tried[original='Mahaoya'] top-> class=building type=residential importance=0.000 -> Mahaoya Doctors Quarters, Aralaganwila-Maha Oya Road, Maha Oya, Ampara District, Eastern Province, Sri Lanka
+    MPI        'Manipai'                           tried[original='Manipai'] top-> class=highway type=secondary importance=0.053 -> Manipai Kaitadi road, Kaithady, Jaffna District, Northern Province, Sri Lanka
+    MQ         'Mahawa'                            tried[original='Mahawa'] top-> class=highway type=tertiary importance=0.053 -> Mahawa-ambanpola road, Maho, Kurunǣgala, North Western Province, 60600, Sri Lanka
+    MRJ        'Mirijjawila'                       tried[original='Mirijjawila'] top-> class=landuse type=industrial importance=0.080 -> Mirijjawila Export Promotion Zone, Hambantota, Hambantota District, Southern Province, Sri Lanka
+    MUP        'Mullipothanai'                     tried[original='Mullipothanai', generic_th='Mullipotanai'] top-> class=building type=yes importance=0.000 -> mullipothanai public market, Kandy Road, 98 Junction, 98 Junction - Galmetiyawa, Trincomalee District, Eastern Province, 31312, Sri Lanka
+    MV         'Mount Lavinia'                     tried[original='Mount Lavinia'] top-> class=railway type=station importance=0.000 -> Mount Lavinia, Station Road, Ratmalana North, Ratmalana, Dehiwala, Colombo District, Western Province, 10370, Sri Lanka
+    NHD        'Nachchaduwa'                       tried[original='Nachchaduwa'] top-> class=water type=reservoir importance=0.133 -> Nachchaduwa Tank, Nachchadoowa, Anuradhapura District, North Central Province, Sri Lanka
+    NL         'Naulla'                            tried[original='Naulla'] top-> class=water type=lake importance=0.133 -> Naulla Wewa, Thalawa, Ampara District, Eastern Province, Sri Lanka
+    NW         'Nuwaraeliya'                       tried[original='Nuwaraeliya'] top-> class=tourism type=hotel importance=0.000 -> Unique View Nuwaraeliya, 60, Unique View Road, Haddon Hill, Nuwara Eliya, Nuwara Eliya District, Central Province, 22200, Sri Lanka
+    PAL        'Parliament'                        tried[original='Parliament'] top-> class=leisure type=park importance=0.080 -> Parliament Ground, Pitakotte East, Battaramulla South, Sri Jayewardenepura Kotte, Colombo District, Western Province, Sri Lanka
+    PTV        'Potuvil'                           tried[original='Potuvil'] top-> class=highway type=primary importance=0.053 -> Potuvil - Panama Road, Ulla, Ampara District, Eastern Province, 32500, Sri Lanka
+    PYG        'Payagala'                          tried[original='Payagala'] top-> class=railway type=station importance=0.000 -> Payagala North, Station Road, Beruwala DS Division, Kalutara District, Western Province, 12060, Sri Lanka
+    PYL        'Piliyandala MSU'                   tried[original='Piliyandala'] top-> class=leisure type=playground importance=0.000 -> Piliyandala, Ground Road, Puwakgas Junction, Kesbewa, Colombo District, Western Province, 10300, Sri Lanka
+    RL         'Raddolugama'                       tried[original='Raddolugama'] top-> class=highway type=tertiary importance=0.053 -> Raddolugama road, Muthuwadiya Junction, Kotugoda, Gampaha District, Western Province, 11410, Sri Lanka
+    RMT        'Ranminitenna'                      tried[original='Ranminitenna'] top-> class=highway type=residential importance=0.053 -> Ranminitenna Tele Cinema Village Road, Hambantota District, Southern Province, Sri Lanka
+    SVG        'Sevanagala'                        tried[original='Sevanagala'] top-> class=amenity type=school importance=0.000 -> sevanagala maha viddayalaya, habaraluva road, Monaragala District, Uva Province, 70250, Sri Lanka
+    TBT        'Tambuttegama'                      tried[original='Tambuttegama'] top-> class=highway type=primary importance=0.053 -> Tambuttegama-Balaluwewa Road, Helabodugama, Anuradhapura District, North Central Province, Sri Lanka
+    UD         'Undugoda'                          tried[original='Undugoda'] top-> class=water type=reservoir importance=0.133 -> Pahala Undugoda Wewa, Kalatuwagama, Kurunǣgala, North Western Province, Sri Lanka
+    UPS        'Udupussellawa'                     tried[original='Udupussellawa'] top-> class=amenity type=hospital importance=0.000 -> Udupussellawa Divisional Hospital, Rupaha Road, Kurupanawela, Rupaha, Nuwara Eliya District, Central Province, Sri Lanka
+    VH         'Valachchenai'                      tried[original='Valachchenai'] top-> class=highway type=residential importance=0.053 -> Valachchenai Road, Batticaloa District, Eastern Province, Sri Lanka
+    WK         'Warakapola'                        tried[original='Warakapola'] top-> class=place type=town importance=0.091 -> Warakapola, Kegalle District, Sabaragamuwa Province, 71600, Sri Lanka
+
+  STILL FAILED (no usable Nominatim result under any attempted spelling):
+    AB         'Allawa'                            tried[original='Allawa']
+    ANK        'Agunukolapellessa'                 tried[original='Agunukolapellessa']
+    BAK        'Batakattara'                       tried[original='Batakattara']
+    BBT        'Bambarbotuwa'                      tried[original='Bambarbotuwa']
+    BEW        'Bewaraliya'                        tried[original='Bewaraliya']
+    DOL        'Dolowa'                            tried[original='Dolowa']
+    EH         'Ehiliyagoda'                       tried[original='Ehiliyagoda']
+    EPA        'Eppawela'                          tried[original='Eppawela']
+    GH         'Glaha'                             tried[original='Glaha']
+    GKT        'Giradurukotte'                     tried[original='Giradurukotte']
+    GLE        'Galenbidunuwewa'                   tried[original='Galenbidunuwewa']
+    GNA        'Gangodavila'                       tried[original='Gangodavila']
+    GNP        'Gonapala'                          tried[original='Gonapala']
+    HAV        'Vilasitha Niwasa(HAV)'             tried[original='Vilasitha Niwasa', generic_th='Vilasita Niwasa']
+    HMT        'Hemmatagama'                       tried[original='Hemmatagama']
+    HN         'Higurakgoda'                       tried[original='Higurakgoda']
+    HRP        'Horowpatana'                       tried[original='Horowpatana']
+    IHB        'Ihalabope'                         tried[original='Ihalabope']
+    KDY        'Kotadeniya'                        tried[original='Kotadeniya']
+    KHN        'Keselhenawa'                       tried[original='Keselhenawa']
+    KID        'Kiliwedi'                          tried[original='Kiliwedi']
+    KK         'Kochchikadde'                      tried[original='Kochchikadde']
+    KR         'Kuruvita'                          tried[original='Kuruvita']
+    KUN        'Kaluthara North'                   tried[original='Kaluthara North', generic_th='Kalutara Nort']
+    KWD        'Kalawanchikudy'                    tried[original='Kalawanchikudy']
+    MF         'Maratuwa MSU'                      tried[original='Maratuwa']
+    MGE        'Megahathenna'                      tried[original='Megahathenna', generic_th='Megahatenna']
+    MM         'Madolsima'                         tried[original='Madolsima']
+    MN         'Madolkele'                         tried[original='Madolkele']
+    MUR        'Maruthalawa'                       tried[original='Maruthalawa', generic_th='Marutalawa']
+    NDP        'Nikadalupotha'                     tried[original='Nikadalupotha', generic_th='Nikadalupota']
+    NE         'NortonBrige'                       tried[original='NortonBrige']
+    NF         'Nagada'                            tried[original='Nagada']
+    NGP        'Negampaha'                         tried[original='Negampaha']
+    POL        'Pallapola'                         tried[original='Pallapola']
+    PSG        'Pulathisigama'                     tried[original='Pulathisigama', generic_th='Pulatisigama']
+    RAN        'Ranpokunugama'                     tried[original='Ranpokunugama']
+    RAW        'Ravatawatta'                       tried[original='Ravatawatta']
+    RD         'Rajakadaluwa'                      tried[original='Rajakadaluwa']
+    RKG        'Rukmalgoda'                        tried[original='Rukmalgoda']
+    RKL        'Rikiligaskada'                     tried[original='Rikiligaskada']
+    SRB        'Siribopura'                        tried[original='Siribopura']
+    STK        'Shithankarni'                      tried[original='Shithankarni', generic_th='Shitankarni']
+    SW         'Seruwila'                          tried[original='Seruwila']
+    TA         'Thambalakamam'                     tried[original='Thambalakamam', generic_th='Tambalakamam']
+    TAN        'Talahena'                          tried[original='Talahena']
+    TJ         'Thelijjavila'                      tried[original='Thelijjavila', generic_th='Telijjavila']
+    TKV        'Thinukovil'                        tried[original='Thinukovil', generic_th='Tinukovil']
+    TMA        'Thalemannar'                       tried[original='Thalemannar', generic_th='Talemannar']
+    TP         'Tispane'                           tried[original='Tispane']
+    UDT        'Uduthuththiripitiya'               tried[original='Uduthuththiripitiya', generic_th='Udututtiripitiya']
+    VR         'Veliweriya'                        tried[original='Veliweriya']
+    WEL        'Waverset Place(WEL)'               tried[original='Waverset Place']
+    WET        'Wetara'                            tried[original='Wetara']
+    WTM        'Wattumulla'                        tried[original='Wattumulla']
+
+--- Opmc this run: 0 newly resolved / 2 still low-confidence / 0 still failed (of 2 retried) ---
+
+  STILL LOW-CONFIDENCE (NOT written to DB):
+    AWOP       'Awissawella'                       tried[original='Awissawella'] top-> class=highway type=tertiary importance=0.053 -> Awissawella - Maniyagama - Panawala Road, Nagahahena, Rangegama, Kegalle District, Sabaragamuwa Province, Sri Lanka
+    PLOP       'Piliyandala'                       tried[original='Piliyandala'] top-> class=leisure type=playground importance=0.000 -> Piliyandala, Ground Road, Puwakgas Junction, Kesbewa, Colombo District, Western Province, 10300, Sri Lanka
+
+  SKIPPED - non-geographic (11, not attempted):
+    CSCI       'CSC-IPTV OPMC'
+    CSCS       'CSC-SRA OPMC'
+    CSCT       'CSC-TECH OPMC'
+    CSCU       'CEN-CSC-UI'
+    DEFXXX     'DEFXXX'
+    FLT1       '121-FAULTS'
+    INTN       'INT-NW-SYSADMIN'
+    NESF       'NET-SF-VOICE'
+    NOLA       'NOC-NETFM-LTE-ACC'
+    NOLC       'NOC-NETFM-LTE-CN'
+    SLHQ       'SLT Headquarters'
+
+  SKIPPED - flagged for human confirmation (3, not attempted):
+    HKOP       'Havelock Town'
+    HROP       'Horana'
+    SIERRA     'SIERRA'
+
+====================================================================================================

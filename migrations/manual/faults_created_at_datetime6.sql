@@ -1,0 +1,35 @@
+-- Manual schema change (this project has no Flyway/Liquibase; spring.jpa.hibernate.ddl-auto=update
+-- only adds new columns/tables, never widens an existing column's type — same manual-ALTER approach
+-- used for add_client_accept_enum_value.sql / add_dispute_amendment_enum_values.sql).
+--
+-- FAULT-009 (02_FAULT_TRACKING, FR-5): faults.created_at is a second-precision DATETIME that
+-- rounds to the NEAREST second, while fault_history.created_at is DATETIME(6) (microseconds) —
+-- confirmed via information_schema, not assumed from the Java entity mappings, since neither
+-- Fault.createdAt nor FaultHistory.createdAt carries an explicit columnDefinition; fault_history
+-- only got datetime(6) because Hibernate's MySQL8 dialect default changed after the faults table
+-- was first created, and ddl-auto=update never retrofits an existing column's type. A fault
+-- reported at 13:17:47.689 reads back as 13:17:48 — later than the fault_history row written for
+-- its own creation in the same request — so FaultAssignmentService's synthesised FAULT_CREATED
+-- timeline event sorts to the END of the timeline whenever a status change lands in the same
+-- second (FaultIntegrationTest::getFaultTimeline_chronologicalOrder).
+--
+-- Confirmed no index or query breaks:
+--   - `SHOW INDEX FROM faults WHERE Column_name='created_at'` returns zero rows — no index on
+--     this column (the existing `idx_fault_reported` index is on the separate `reported_at`
+--     column, untouched here).
+--   - FaultRepository's JPQL (`f.createdAt BETWEEN :start AND :end`, `YEAR(f.createdAt) = :year`,
+--     plain ORDER BY) and slt-ai-module's raw SQL (`DATE(created_at)`, `HOUR(created_at)`,
+--     `created_at >= DATE_SUB(...)`) all operate identically on a DATETIME(6) column — MySQL's
+--     DATE()/HOUR()/comparison operators and JPQL BETWEEN all extract/compare correctly regardless
+--     of fractional-second precision.
+--
+-- Verified via:
+--   SELECT TABLE_NAME, COLUMN_TYPE, DATETIME_PRECISION FROM information_schema.COLUMNS
+--     WHERE TABLE_SCHEMA='slt_fieldops_db' AND COLUMN_NAME='created_at'
+--     AND TABLE_NAME IN ('faults','fault_history');
+-- Result BEFORE (2026-08-06, slt_fieldops_db):
+--   fault_history  datetime(6)  6
+--   faults         datetime     0
+
+ALTER TABLE faults
+    MODIFY COLUMN created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6);

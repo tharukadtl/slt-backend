@@ -73,7 +73,8 @@ public class ExchangeService {
      */
     @Transactional(readOnly = true)
     public List<ExchangeDTO> getAll(Long opmcFilter, boolean activeOnly) {
-        List<Exchange> base = activeOnly ? exchangeRepo.findByIsActiveTrue() : exchangeRepo.findAll();
+        List<Exchange> base = activeOnly
+            ? exchangeRepo.findActiveWithFullChain() : exchangeRepo.findAllWithFullChain();
         return base.stream()
             .filter(e -> opmcFilter == null || opmcFilter.equals(opmcIdOf(e)))
             .map(this::mapToDTO).collect(Collectors.toList());
@@ -104,7 +105,7 @@ public class ExchangeService {
      */
     @Transactional(readOnly = true)
     public List<ExchangeDTO> getByOpmc(Long opmcId, Long opmcFilter, boolean activeOnly) {
-        return exchangeRepo.findByOpmcId(opmcId).stream()
+        return exchangeRepo.findByOpmcIdWithFullChain(opmcId).stream()
             .filter(e -> opmcFilter == null || opmcFilter.equals(opmcIdOf(e)))
             .filter(e -> !activeOnly || Boolean.TRUE.equals(e.getIsActive()))
             .map(this::mapToDTO).collect(Collectors.toList());

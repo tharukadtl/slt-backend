@@ -26,6 +26,20 @@ public interface DaySessionMemberRepository extends JpaRepository<DaySessionMemb
            "AND dsm.isActive = TRUE")
     Optional<DaySessionMember> findActiveMemberForToday(Long techId);
 
+    /**
+     * Same as findActiveMemberForToday, but scoped to a specific team lead's
+     * session — used to confirm a technician is actually on THIS team before
+     * a job gets reassigned to them.
+     */
+    @Query("SELECT dsm FROM DaySessionMember dsm " +
+           "JOIN DaySession ds ON dsm.sessionId = ds.id " +
+           "WHERE dsm.technicianId = :techId " +
+           "AND ds.teamLeadId = :teamLeadId " +
+           "AND ds.sessionDate = CURRENT_DATE " +
+           "AND ds.status = 'ACTIVE' " +
+           "AND dsm.isActive = TRUE")
+    Optional<DaySessionMember> findActiveMemberForTeamLeadToday(Long teamLeadId, Long techId);
+
     /** Deactivate all members at EOD */
     @Modifying
     @Transactional

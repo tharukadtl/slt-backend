@@ -1,0 +1,63 @@
+OPMCCODE,DESCRIPTION,HPCODE,Province
+CEOP,Central,DHRFM/CM,Western/ Colombo
+NPOP,Narahenpita,DHRFM/CM,Western/ Colombo
+BYOP,Biyagama,DHRFM/CM,Western/ Colombo
+RGOP,Ragama,DHRFM/CM,Western/ Colombo
+RMOP,Ratmalana,DHRFM/CM,Western/ Colombo
+DEFXXX,DEFXXX,,
+AWOP,Awissawella,HPSAB,Sabaragamuwa
+TROP,Trincomale,HPN/E,North East
+BDOP,Bandarawela,HPUVA,Uva
+BTOP,Batticaloa,HPN/E,North East
+JFOP,Jaffna,HPN/E,North East
+KUOP,Kurunegala,HPNW/NCP,North Western
+KYOP,Kandy,HPCP,Central
+MTOP,Matara,HPSOUTH,South
+NGOP,Negombo,HPWESN,Western/Gampaha
+PNOP,Panadura,HPWESS,Western
+BUOP,Badulla,HPUVA,Uva
+ADOP,Anuradhapura,HPNW/NCP,North Western
+APOP,Ampara,HPN/E,North East
+CWOP,Chilaw,HPNW/NCP,North Western
+GLOP,Galle,HPSOUTH,South
+GQOP,Gampaha,HPWESN,Western/Gampaha
+GPOP,Gampola,HPCP,Central
+HBOP,Hambanthota,HPSOUTH,South
+HTOP,Hatton,HPUVA,Uva
+HOOP,Homagama,DHRFM/CM,Western/ Colombo
+KLOP,Kalmunai,HPN/E,North East
+KTOP,Kaluthara,HPWESS,Wetern
+KEOP,Kegalle,HPSAB,Sabaragamuwa
+MBOP,Mannar,HPN/E,North East
+MAOP,Mathale,HPCP,Central
+NWOP,Nuwara Eliya,HPUVA,Uva
+PROP,Polonnaruwa,HPNW/NCP,North Western
+RNOP,Ratnapura,HPSAB,Sabaragamuwa
+VAOP,Vavunia,HPN/E,North East
+SLHQ,SLT Headquarters,,
+CSCT,CSC-TECH OPMC,,
+CSCS,CSC-SRA OPMC,,
+KOOP,Kilinochchi,HPN/E,North East
+NESF,NET-SF-VOICE,,
+MLOP,Mullaitivu,HPN/E,North East
+MGOP,Monaragala,HPUVA,Uva
+NTOP,Nittambuwa,HPWESN,Western/Gampaha
+KPOP,Kuliyapitiya,HPNW/NCP,North Western
+PLOP,Piliyandala,DHRFM/CM,Western/ Colombo
+KNOP,Kolonnawa,DHRFM/CM,Western/ Colombo
+CSCI,CSC-IPTV OPMC,,
+MDOP,Maradana,DHRFM/CM,Western/ Colombo
+INTN,INT-NW-SYSADMIN,,
+FLT1,121-FAULTS,,
+NOLA,NOC-NETFM-LTE-ACC,,
+NOLC,NOC-NETFM-LTE-CN,,
+CSCU,CEN-CSC-UI,,
+EBOP,Embilipitiya,HPSAB,Sabaragamuwa
+DBOP,Dambulla,HPCP,Central
+NDOP,Nugegoda,DHRFM/CM,Western/ Colombo
+SIERRA,SIERRA,DHRFM/CM,Western/ Colombo
+MHOP,Maharagama,DHRFM/CM,Western/ Colombo
+HROP,Horana,,
+KXOP,Kotte,DHRFM/CM,Western/ Colombo
+HKOP,Havelock Town,,
+AGOP,Ambalangoda,HPSOUTH,South

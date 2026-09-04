@@ -13,7 +13,7 @@ import java.time.LocalDate;
  *   "modelYear":          2020,
  *   "vehicleType":        "VAN",
  *   "fuelType":           "DIESEL",
- *   "branchId":           1,
+ *   "opmcId":             1,
  *   "insuranceExpiry":    "2026-06-30",
  *   "revenueLicenseExpiry": "2026-03-15"
  * }
@@ -33,7 +33,7 @@ public class CreateVehicleRequest {
     private String  vehicleType;   // VAN / CAR / MOTORCYCLE / TRUCK / OTHER
     private String  fuelType;      // PETROL / DIESEL / ELECTRIC / HYBRID
 
-    private Long branchId;
+    private Long opmcId;
 
     private Integer   currentOdometer = 0;
     private LocalDate insuranceExpiry;
@@ -42,6 +42,7 @@ public class CreateVehicleRequest {
     private String    insuranceCompany;
     private String    insurancePolicyNumber;
     private String    notes;
+    private LocalDate nextServiceDate;
 
     public CreateVehicleRequest() {}
 
@@ -51,7 +52,7 @@ public class CreateVehicleRequest {
     public Integer   getModelYear()             { return modelYear; }
     public String    getVehicleType()           { return vehicleType; }
     public String    getFuelType()              { return fuelType; }
-    public Long      getBranchId()              { return branchId; }
+    public Long      getOpmcId()                { return opmcId; }
     public Integer   getCurrentOdometer()       { return currentOdometer; }
     public LocalDate getInsuranceExpiry()       { return insuranceExpiry; }
     public LocalDate getRevenueLicenseExpiry()  { return revenueLicenseExpiry; }
@@ -59,6 +60,7 @@ public class CreateVehicleRequest {
     public String    getInsuranceCompany()      { return insuranceCompany; }
     public String    getInsurancePolicyNumber() { return insurancePolicyNumber; }
     public String    getNotes()                 { return notes; }
+    public LocalDate getNextServiceDate()       { return nextServiceDate; }
 
     public void setRegistrationNumber(String v)    { this.registrationNumber    = v; }
     public void setMake(String v)                  { this.make                  = v; }
@@ -66,7 +68,7 @@ public class CreateVehicleRequest {
     public void setModelYear(Integer v)            { this.modelYear             = v; }
     public void setVehicleType(String v)           { this.vehicleType           = v; }
     public void setFuelType(String v)              { this.fuelType              = v; }
-    public void setBranchId(Long v)                { this.branchId              = v; }
+    public void setOpmcId(Long v)                  { this.opmcId                = v; }
     public void setCurrentOdometer(Integer v)      { this.currentOdometer       = v; }
     public void setInsuranceExpiry(LocalDate v)    { this.insuranceExpiry       = v; }
     public void setRevenueLicenseExpiry(LocalDate v){ this.revenueLicenseExpiry = v; }
@@ -74,4 +76,5 @@ public class CreateVehicleRequest {
     public void setInsuranceCompany(String v)      { this.insuranceCompany      = v; }
     public void setInsurancePolicyNumber(String v) { this.insurancePolicyNumber = v; }
     public void setNotes(String v)                 { this.notes                 = v; }
+    public void setNextServiceDate(LocalDate v)    { this.nextServiceDate       = v; }
 }

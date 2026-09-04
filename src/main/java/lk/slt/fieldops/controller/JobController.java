@@ -81,7 +81,9 @@ public class JobController {
     // ── 2. Team Lead does EOD ─────────────────────────────────────────────────
     /**
      * POST /api/jobs/eod
-     * Closes the session, returns all open jobs to TL, logs out technicians.
+     * Closes the session, logs out technicians, and routes any still-open jobs
+     * per FR-20's EOD Routing Options (request.routingOption): forward to Admin,
+     * carry over to the Team Lead's own next day, or reassign to another Team Lead.
      */
     @PostMapping("/eod")
     @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN')")
@@ -155,6 +157,7 @@ public class JobController {
 
     // ── 8. Get one job by ID ──────────────────────────────────────────────────
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Job> getById(@PathVariable Long id) {
         return ResponseEntity.ok(jobService.getJobById(id));
     }
@@ -166,6 +169,10 @@ public class JobController {
      *       { "newStatus": "IN_PROGRESS" }
      *       { "newStatus": "HOLD", "reason": "Missing cable" }
      *       { "newStatus": "COMPLETED", "causeOfFault": "...", "completionRemarks": "..." }
+     *       { "newStatus": "REJECTED", "reason": "...",
+     *         "rejectionCategory": "ISSUE_MISMATCH", "observedIssueType": "PHONE" }
+     *       { "newStatus": "REJECTED", "reason": "...",
+     *         "rejectionCategory": "MATERIAL_DELAY", "linkedMaterialRequestId": 42 }
      */
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN')")
@@ -177,19 +184,25 @@ public class JobController {
         return ResponseEntity.ok(jobService.updateJobStatus(id, request, userId));
     }
 
-    // ── 10. Reassign job to another Technician ────────────────────────────────
-    @PostMapping("/{id}/reassign")
-    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN')")
-    public ResponseEntity<Job> reassign(
+    // ── 9b. Technician marks arrival at job site ("I Have Arrived") ────────────
+    @PostMapping("/{id}/arrived")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN')")
+    public ResponseEntity<Job> markArrived(
             @PathVariable Long id,
-            @RequestBody Map<String, Long> body,
             @AuthenticationPrincipal Long userId) {
 
-        Long newTechnicianId = body.get("newTechnicianId");
-        if (newTechnicianId == null) {
-            throw new RuntimeException("newTechnicianId is required in the request body.");
-        }
-        return ResponseEntity.ok(jobService.reassignJob(id, newTechnicianId, userId));
+        return ResponseEntity.ok(jobService.markArrived(id, userId));
+    }
+
+    // ── 10. Reassign job to another Technician ────────────────────────────────
+    @PostMapping("/{id}/reassign")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<Job> reassign(
+            @PathVariable Long id,
+            @Valid @RequestBody ReassignJobRequest body,
+            @AuthenticationPrincipal Long userId) {
+
+        return ResponseEntity.ok(jobService.reassignJob(id, body.getNewTechnicianId(), userId));
     }
 
     // ── 11. Log material usage ────────────────────────────────────────────────
@@ -210,6 +223,7 @@ public class JobController {
 
     // ── 12. Get materials logged for a job ────────────────────────────────────
     @GetMapping("/{id}/materials")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<MaterialUsage>> getMaterials(@PathVariable Long id) {
         return ResponseEntity.ok(jobService.getMaterialsForJob(id));
     }
@@ -221,6 +235,7 @@ public class JobController {
      * Used by Auth module to gate Technician login.
      */
     @GetMapping("/technician/{techId}/active")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Map<String, Object>> isTechnicianActive(
             @PathVariable Long techId) {
 
@@ -298,10 +313,14 @@ public class JobController {
     @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN')")
     public ResponseEntity<Job> submitSignature(
             @PathVariable Long id,
-            @RequestBody Map<String, String> body,
+            @Valid @RequestBody SubmitSignatureRequest body,
             @AuthenticationPrincipal Long userId) {
 
-        String signature = body.get("signature");
+        String signature = body.getSignature();
+        // @NotBlank on SubmitSignatureRequest already catches this for real HTTP
+        // requests, but this method is also called directly in unit tests that
+        // bypass Spring's @Valid pipeline entirely — keep this as a second,
+        // directly-testable guard rather than relying on validation alone.
         if (signature == null || signature.isBlank()) {
             throw new RuntimeException("signature is required in the request body.");
         }

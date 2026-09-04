@@ -1,26 +1,17 @@
 package lk.slt.fieldops;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
-import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @SpringBootApplication
+@EnableScheduling
 public class Application {
-
-	@Value("${app.uploads.dir:uploads}")
-	private String uploadsDir;
 
 	public static void main(String[] args) {
 		SpringApplication.run(Application.class, args);
-
-		// TEMP: generate password hash for Admin@2024
-		BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-		String hashedPassword = encoder.encode("Admin@2024");
-		System.out.println("BCrypt hash: " + hashedPassword);
 	}
 
 	@Bean
@@ -35,11 +26,12 @@ public class Application {
 						.allowCredentials(true);
 			}
 
-			@Override
-			public void addResourceHandlers(ResourceHandlerRegistry registry) {
-				registry.addResourceHandler("/uploads/**")
-						.addResourceLocations("file:" + uploadsDir + "/");
-			}
+			// No addResourceHandlers() override here anymore — /uploads/** used to be served
+			// unauthenticated straight off disk via a static ResourceHandler (QA_Compliance
+			// Consolidated_Report.md, Stage G Minor: "/uploads/** served with no authentication").
+			// It's now a real, authorized controller method instead — see
+			// UploadServingController — so every request goes through SecurityConfig's
+			// jwtAuthFilter and per-file ownership checks like any other endpoint.
 		};
 	}
 }

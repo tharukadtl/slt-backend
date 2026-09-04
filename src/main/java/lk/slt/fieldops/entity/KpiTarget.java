@@ -20,8 +20,8 @@ import java.time.LocalDateTime;
                         name = "idx_kpi_target_period",
                         columnList = "period"),
                 @Index(
-                        name = "idx_kpi_target_branch",
-                        columnList = "branch_id")
+                        name = "idx_kpi_target_opmc",
+                        columnList = "opmc_id")
         })
 @Data
 @Builder
@@ -44,10 +44,10 @@ public class KpiTarget {
     @JoinColumn(name = "assigned_by_id")
     private User assignedBy;
 
-    // ─── Branch (for group targets) ───────────────────────
+    // ─── OPMC (for group targets) ──────────────────────────
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "branch_id")
-    private Branch branch;
+    @JoinColumn(name = "opmc_id")
+    private Opmc opmc;
 
     // ─── Target Details ───────────────────────────────────
     @Column(name = "title",
@@ -103,8 +103,12 @@ public class KpiTarget {
     private Boolean isActive = true;
 
     // ─── Branch-level monthly target fields ───────────────
+    // Scopes this monthly target to a branch. Deliberately not a Branch FK like
+    // `branch` above — this is a different, unrelated feature (a branch-wide
+    // monthly SLA/rating goal, not a group target row) that happens to share
+    // this table; the distinct name keeps the two from being confused.
     @Column(name = "kpi_branch_id")
-    private Long branchId;
+    private Long monthlyTargetBranchId;
 
     @Column(name = "target_year")
     private Integer targetYear;

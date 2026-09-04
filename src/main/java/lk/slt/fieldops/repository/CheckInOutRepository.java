@@ -66,11 +66,11 @@ public interface CheckInOutRepository
 
     @Query("SELECT c FROM CheckInOut c "
             + "JOIN c.user u "
-            + "WHERE u.branchId = :branchId "
+            + "WHERE u.opmcId = :opmcId "
             + "AND c.checkInTime >= :startOfDay "
             + "ORDER BY c.checkInTime DESC")
-    List<CheckInOut> findTeamTodayByBranchId(
-            @Param("branchId") Long branchId,
+    List<CheckInOut> findTeamTodayByOpmcId(
+            @Param("opmcId") Long opmcId,
             @Param("startOfDay")
             LocalDateTime startOfDay);
 

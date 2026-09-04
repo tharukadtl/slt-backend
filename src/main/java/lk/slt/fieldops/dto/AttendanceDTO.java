@@ -2,6 +2,7 @@ package lk.slt.fieldops.dto;
 
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -52,14 +53,21 @@ public class AttendanceDTO {
     @AllArgsConstructor
     public static class CheckOutRequest {
 
-        @NotNull(message = "Latitude is required")
+        // Nullable on purpose, symmetric with CheckInRequest above: a
+        // Technician ending their shift indoors/underground may have no GPS
+        // fix, and the client sends null rather than a fake (0,0) phantom
+        // location. AttendanceService.checkOut never reads these coordinates
+        // for any logic (it only copies them onto the nullable
+        // CheckInOut.checkOutLatitude/checkOutLongitude columns), so a missing
+        // fix must not block end-of-day check-out. @DecimalMin/@DecimalMax are
+        // skipped by Bean Validation when the value is null, so a real,
+        // out-of-range coordinate is still rejected.
         @DecimalMin(value = "-90.0",
                 message = "Latitude must be >= -90")
         @DecimalMax(value = "90.0",
                 message = "Latitude must be <= 90")
         private Double latitude;
 
-        @NotNull(message = "Longitude is required")
         @DecimalMin(value = "-180.0",
                 message = "Longitude must be >= -180")
         @DecimalMax(value = "180.0",
@@ -69,6 +77,26 @@ public class AttendanceDTO {
         private String address;
         private String notes;
         private Integer jobsCompleted;
+
+        // SRS 5.3.1.4 — EOD Pending-Task Handover. One entry per job still
+        // open at checkout time; service-layer validates every open job has
+        // one (see AttendanceService.checkOut) rather than a blanket reason.
+        // Omitted/empty when the Technician has no open jobs to explain.
+        private List<JobHandoverReason> openJobReasons;
+    }
+
+    // ─── Job Handover Reason (SRS 5.3.1.4) ────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class JobHandoverReason {
+
+        @NotNull(message = "jobId is required")
+        private Long jobId;
+
+        @NotBlank(message = "A reason is required for each open job")
+        private String reason;
     }
 
     // ─── Attendance Response ──────────────────────────────

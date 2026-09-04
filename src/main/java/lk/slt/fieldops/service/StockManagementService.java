@@ -1,5 +1,6 @@
 package lk.slt.fieldops.service;
 
+import lk.slt.fieldops.dto.MaterialDTO;
 import lk.slt.fieldops.dto.StockDTO;
 import lk.slt.fieldops.entity.*;
 import lk.slt.fieldops.repository.*;
@@ -23,12 +24,24 @@ public class StockManagementService {
 
     private final MaterialRepository
             materialRepository;
+    private final MaterialCategoryRepository
+            materialCategoryRepository;
     private final StockTransactionRepository
             stockTransactionRepository;
     private final UserRepository
             userRepository;
     private final WebSocketEventPublisher
             webSocketEventPublisher;
+    private final NotificationService
+            notificationService;
+
+    // Resolves a material's real category name instead of a hardcoded placeholder.
+    private String resolveCategoryName(Long categoryId) {
+        if (categoryId == null) return "Uncategorized";
+        return materialCategoryRepository.findById(categoryId)
+                .map(MaterialCategory::getName)
+                .orElse("Uncategorized");
+    }
 
     // ─── Adjust Stock ─────────────────────────────────────
 
@@ -137,6 +150,7 @@ public class StockManagementService {
                         .notes(req.getNotes())
                         .unitCost(unitCostBD)
                         .totalCost(totalCostBD)
+                        .ipAddress(lk.slt.fieldops.shared.RequestContext.getClientIp())
                         .build();
 
         StockTransaction saved =
@@ -171,6 +185,20 @@ public class StockManagementService {
                     alertMsg,
                     "STOCK_ALERT");
 
+            // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: the sendToRole
+            // broadcast above is WebSocket-only, and NotificationService.notifyLowStock had
+            // zero callers anywhere. Mirrors FaultService.notifyAdminsOfNewFault's
+            // loop-over-admins shape for the same "broadcast to whichever admins are on
+            // shift" requirement. This is the real per-adjustment threshold-crossing event —
+            // getLowStockAlerts() is a separate, pull-based report, not a trigger.
+            List<User> admins = new ArrayList<>();
+            admins.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.ADMIN));
+            admins.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.SUPER_ADMIN));
+            for (User a : admins) {
+                notificationService.notifyLowStock(
+                        a.getId(), a.getFcmToken(), material.getName(), material.getId());
+            }
+
             log.warn(alertMsg);
         }
 
@@ -195,7 +223,7 @@ public class StockManagementService {
                         req.getQuantityChange())
                 .newStock(newStock)
                 .transactionType(
-                        req.getTransactionType())
+                        saved.getTransactionType().name())
                 .reason(req.getReason())
                 .reference(req.getReference())
                 .performedBy(admin.getFullName())
@@ -341,7 +369,7 @@ public class StockManagementService {
                             .materialName(
                                     material.getName())
                             .sku(material.getSku())
-                            .category("General")
+                            .category(resolveCategoryName(material.getCategoryId()))
                             .unit(material.getUnit())
                             .currentStock(current)
                             .minThreshold(minThreshold)
@@ -489,6 +517,30 @@ public class StockManagementService {
                 .collect(Collectors.toList());
     }
 
+    // ─── Search Stock (technician inventory browser) ──────
+
+    public List<StockDTO.StockLevelDTO>
+    searchStockLevels(String search, Long categoryId) {
+        log.debug("Searching materials: search={}, categoryId={}", search, categoryId);
+
+        List<Material> materials;
+        boolean hasSearch = search != null && !search.isBlank();
+
+        if (hasSearch && categoryId != null) {
+            materials = materialRepository.searchByNameOrSkuAndCategory(search, categoryId);
+        } else if (hasSearch) {
+            materials = materialRepository.searchByNameOrSku(search);
+        } else if (categoryId != null) {
+            materials = materialRepository.findByCategoryId(categoryId);
+        } else {
+            materials = materialRepository.findAllActive();
+        }
+
+        return materials.stream()
+                .map(this::mapToStockLevel)
+                .collect(Collectors.toList());
+    }
+
     // ─── Private Helpers ──────────────────────────────────
 
     private StockDTO.StockLevelDTO
@@ -531,7 +583,7 @@ public class StockManagementService {
                 .materialId(material.getId())
                 .materialName(material.getName())
                 .sku(material.getSku())
-                .category("General")
+                .category(resolveCategoryName(material.getCategoryId()))
                 .unit(material.getUnit())
                 .currentStock(current)
                 .minThreshold(minThreshold)
@@ -607,16 +659,15 @@ public class StockManagementService {
                 .build();
     }
 
+    // Delegates to Material.computeStockStatus so every part of the system
+    // (persisted entity, stock-level views, material-request views) agrees
+    // on the same 3-state IN_STOCK/LOW_STOCK/OUT_OF_STOCK vocabulary.
     private String getStockStatus(
             int current, Integer minThreshold) {
-        int threshold = minThreshold != null
-                ? minThreshold : 10;
-        if (current <= 0) return "OUT_OF_STOCK";
-        if (current <= threshold / 2)
-            return "CRITICAL";
-        if (current <= threshold)
-            return "LOW_STOCK";
-        return "IN_STOCK";
+        return lk.slt.fieldops.entity.Material.computeStockStatus(
+                java.math.BigDecimal.valueOf(current),
+                minThreshold != null ? java.math.BigDecimal.valueOf(minThreshold) : null
+        ).name();
     }
 
     private String getStatusColor(
@@ -624,7 +675,6 @@ public class StockManagementService {
         switch (status) {
             case "IN_STOCK": return "#4CAF50";
             case "LOW_STOCK": return "#FF9800";
-            case "CRITICAL": return "#FF5722";
             case "OUT_OF_STOCK": return "#F44336";
             default: return "#9E9E9E";
         }
@@ -635,7 +685,6 @@ public class StockManagementService {
         switch (status) {
             case "IN_STOCK": return "✅";
             case "LOW_STOCK": return "⚠️";
-            case "CRITICAL": return "🔴";
             case "OUT_OF_STOCK": return "🚫";
             default: return "📦";
         }
@@ -734,9 +783,11 @@ public class StockManagementService {
     // ─── Material CRUD ────────────────────────────────────
 
     @Transactional
-    public Material createMaterial(java.util.Map<String, Object> body) {
+    public Material createMaterial(MaterialDTO.CreateRequest req) {
         Material m = new Material();
-        applyMaterialBody(m, body);
+        applyMaterialFields(m, req.getName(), req.getSku(), req.getUnit(), req.getUnitPrice(),
+                req.getStockQuantity(), req.getMinThreshold(), req.getMaxThreshold(),
+                req.getReorderQuantity(), req.getCategoryId(), req.getIsFoc(), req.getIsActive());
         if (m.getCurrentStock() != null && m.getCurrentStock().compareTo(java.math.BigDecimal.ZERO) > 0) {
             m.setStockStatus(Material.StockStatus.IN_STOCK);
         }
@@ -744,37 +795,31 @@ public class StockManagementService {
     }
 
     @Transactional
-    public Material updateMaterial(Long id, java.util.Map<String, Object> body) {
+    public Material updateMaterial(Long id, MaterialDTO.UpdateRequest req) {
         Material m = materialRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Material not found: " + id));
-        applyMaterialBody(m, body);
+        applyMaterialFields(m, req.getName(), req.getSku(), req.getUnit(), req.getUnitPrice(),
+                req.getStockQuantity(), req.getMinThreshold(), req.getMaxThreshold(),
+                req.getReorderQuantity(), req.getCategoryId(), req.getIsFoc(), req.getIsActive());
         return materialRepository.save(m);
     }
 
-    private void applyMaterialBody(Material m, java.util.Map<String, Object> body) {
-        if (body.get("name") instanceof String s)   m.setName(s);
-        if (body.get("sku")  instanceof String s && !s.isBlank()) m.setSku(s);
-        if (body.get("unit") instanceof String s)   m.setUnit(s);
+    /** Partial-apply: each parameter is only written onto the entity when non-null. */
+    private void applyMaterialFields(Material m, String name, String sku, String unit,
+            java.math.BigDecimal unitPrice, java.math.BigDecimal stockQuantity,
+            java.math.BigDecimal minThreshold, Integer maxThreshold, Integer reorderQuantity,
+            Long categoryId, Boolean isFoc, Boolean isActive) {
 
-        Object up = body.get("unitPrice");
-        if (up != null) m.setUnitPrice(new java.math.BigDecimal(up.toString()));
-
-        Object sq = body.get("stockQuantity");
-        if (sq != null) m.setCurrentStock(new java.math.BigDecimal(sq.toString()));
-
-        Object mt = body.get("minThreshold");
-        if (mt != null) m.setMinimumThreshold(new java.math.BigDecimal(mt.toString()));
-
-        Object mxt = body.get("maxThreshold");
-        if (mxt != null) m.setMaxThreshold(Integer.valueOf(mxt.toString()));
-
-        Object rq = body.get("reorderQuantity");
-        if (rq != null) m.setReorderQuantity(Integer.valueOf(rq.toString()));
-
-        Object isFoc = body.get("isFoc");
-        if (isFoc instanceof Boolean b) m.setChargeType(b ? Material.ChargeType.FOC : Material.ChargeType.CHARGEABLE);
-
-        Object active = body.get("isActive");
-        if (active instanceof Boolean b) m.setIsActive(b);
+        if (name != null) m.setName(name);
+        if (sku != null && !sku.isBlank()) m.setSku(sku);
+        if (unit != null) m.setUnit(unit);
+        if (unitPrice != null) m.setUnitPrice(unitPrice);
+        if (stockQuantity != null) m.setCurrentStock(stockQuantity);
+        if (minThreshold != null) m.setMinimumThreshold(minThreshold);
+        if (maxThreshold != null) m.setMaxThreshold(maxThreshold);
+        if (reorderQuantity != null) m.setReorderQuantity(reorderQuantity);
+        if (categoryId != null) m.setCategoryId(categoryId);
+        if (isFoc != null) m.setChargeType(isFoc ? Material.ChargeType.FOC : Material.ChargeType.CHARGEABLE);
+        if (isActive != null) m.setIsActive(isActive);
     }
 }

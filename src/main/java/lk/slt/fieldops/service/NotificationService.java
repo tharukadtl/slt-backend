@@ -182,6 +182,25 @@ public class NotificationService {
             jobId, "JOB");
     }
 
+    // QA_Compliance_Consolidated_Report.md — technician EOD pending-job handover
+    // (AttendanceService.checkOut) set eodHandoverReason/eodHandoverAt and reset the linked
+    // fault's status, but never told the Team Lead. Deliberately a distinct method from
+    // notifyJobRejectedToTeamLead immediately above rather than reused: an EOD handover is NOT a
+    // rejection (no rejectionCategory is ever set for it — see AttendanceServiceTest and the
+    // ATTENDANCE sheet automation writeup), so "Job Rejected... Please reassign" would misstate
+    // what happened. JOB_ON_HOLD matches the job's real resulting state (PENDING, awaiting
+    // reassignment) better than GENERAL.
+    @Transactional
+    public void notifyJobEodHandoverToTeamLead(Long teamLeadId, String tlFcmToken,
+                                                String jobNumber, Long jobId, String reason) {
+        notifyUser(teamLeadId, tlFcmToken,
+            Notification.NotificationType.JOB_ON_HOLD,
+            "Job Handed Over at End of Day",
+            "Job #" + jobNumber + " was handed back at end of day. Reason: " + reason
+                + ". Please reassign.",
+            jobId, "JOB");
+    }
+
     @Transactional
     public void notifyJobRejectedToTeamLead(Long teamLeadId, String tlFcmToken,
                                              String jobNumber, Long jobId, String reason) {
@@ -190,6 +209,16 @@ public class NotificationService {
             "Job Rejected by Technician",
             "Job #" + jobNumber + " was rejected. Reason: " + reason + ". Please reassign.",
             jobId, "JOB");
+    }
+
+    @Transactional
+    public void notifyFaultReported(Long adminId, String adminFcmToken,
+                                     String faultNumber, Long faultId) {
+        notifyUser(adminId, adminFcmToken,
+            Notification.NotificationType.FAULT_REPORTED,
+            "New Fault Reported",
+            "Fault #" + faultNumber + " has been reported by a client.",
+            faultId, "FAULT");
     }
 
     @Transactional
@@ -204,12 +233,69 @@ public class NotificationService {
 
     @Transactional
     public void notifyPaymentApproved(Long teamLeadId, String tlFcmToken,
-                                       String paymentNumber, Long paymentId) {
+                                       String paymentNumber, Long paymentId,
+                                       String approvedAmount) {
         notifyUser(teamLeadId, tlFcmToken,
             Notification.NotificationType.PAYMENT_APPROVED,
             "Payment Approved",
-            "Payment #" + paymentNumber + " has been approved and billed.",
+            "Payment #" + paymentNumber + " has been approved and billed. Amount: LKR "
+                + approvedAmount + ".",
             paymentId, "PAYMENT");
+    }
+
+    // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: payment submission was
+    // WebSocket-only (sendToRole("admin", ...)), no durable channel. Called once per active
+    // ADMIN/SUPER_ADMIN, mirroring FaultService.notifyAdminsOfNewFault's established
+    // loop-over-admins shape for the identical "broadcast to whichever admins are on shift"
+    // requirement.
+    @Transactional
+    public void notifyPaymentSubmitted(Long adminId, String adminFcmToken,
+                                        String paymentNumber, Long paymentId) {
+        notifyUser(adminId, adminFcmToken,
+            Notification.NotificationType.PAYMENT_SUBMITTED,
+            "New Payment Submitted",
+            "Payment #" + paymentNumber + " has been submitted and is awaiting review.",
+            paymentId, "PAYMENT");
+    }
+
+    // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: material-request submission
+    // was WebSocket-only. Same admin-loop shape as notifyPaymentSubmitted above.
+    @Transactional
+    public void notifyMaterialRequestSubmitted(Long adminId, String adminFcmToken,
+                                                String requestNumber, Long requestId) {
+        notifyUser(adminId, adminFcmToken,
+            Notification.NotificationType.MATERIAL_REQUEST_SUBMITTED,
+            "New Material Request",
+            "Material request #" + requestNumber + " has been submitted and is awaiting review.",
+            requestId, "MATERIAL_REQUEST");
+    }
+
+    // QA_Compliance_Consolidated_Report.md — RES-015's durable-channel half: material-request
+    // approval was WebSocket-only (sendToUser to the requester), no FCM push, no persisted row.
+    @Transactional
+    public void notifyMaterialRequestApproved(Long requesterId, String requesterFcmToken,
+                                               String requestNumber, Long requestId,
+                                               String itemsSummary) {
+        notifyUser(requesterId, requesterFcmToken,
+            Notification.NotificationType.MATERIAL_REQUEST_APPROVED,
+            "Material Request Approved",
+            "Your material request #" + requestNumber + " has been approved: " + itemsSummary,
+            requestId, "MATERIAL_REQUEST");
+    }
+
+    // QA_Compliance_Consolidated_Report.md — RES-015's durable-channel half, rejection side.
+    // Notification.NotificationType previously had no MATERIAL_REQUEST_REJECTED constant at
+    // all, so this event could not even be persisted, let alone pushed — added alongside this
+    // method.
+    @Transactional
+    public void notifyMaterialRequestRejected(Long requesterId, String requesterFcmToken,
+                                               String requestNumber, Long requestId,
+                                               String reason) {
+        notifyUser(requesterId, requesterFcmToken,
+            Notification.NotificationType.MATERIAL_REQUEST_REJECTED,
+            "Material Request Rejected",
+            "Your material request #" + requestNumber + " was rejected. Reason: " + reason,
+            requestId, "MATERIAL_REQUEST");
     }
 
     @Transactional
@@ -223,14 +309,47 @@ public class NotificationService {
             paymentId, "PAYMENT");
     }
 
+    // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: this helper had zero callers
+    // anywhere and, even once wired in, only persisted an in-app row — no push, despite every
+    // sibling helper in this class doing both halves via notifyUser. Extended to push too rather
+    // than left as designed, so low stock is a genuine push event like the other 7 in this fix.
     @Transactional
-    public void notifyLowStock(Long adminId, String materialName, Long materialId) {
-        // Low stock is in-app only — no push
-        saveInApp(adminId,
+    public void notifyLowStock(Long adminId, String adminFcmToken,
+                                String materialName, Long materialId) {
+        notifyUser(adminId, adminFcmToken,
             Notification.NotificationType.LOW_STOCK_ALERT,
             "Low Stock Alert",
             "'" + materialName + "' stock is at or below minimum threshold. Please restock.",
             materialId, "MATERIAL");
+    }
+
+    // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: staff check-in was
+    // WebSocket-only (sendToRole("admin", ...)). Same admin-loop shape as
+    // notifyPaymentSubmitted/notifyMaterialRequestSubmitted above.
+    @Transactional
+    public void notifyStaffCheckedIn(Long adminId, String adminFcmToken,
+                                      String technicianName, Long checkInId) {
+        notifyUser(adminId, adminFcmToken,
+            Notification.NotificationType.ATTENDANCE_CHECK_IN,
+            "Staff Checked In",
+            technicianName + " checked in.",
+            checkInId, "ATTENDANCE");
+    }
+
+    // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: "a customer being told a
+    // technician was assigned to their fault" (FaultAssignmentService, sendToUser to the
+    // customer) — distinct from NOTIF-001's Team-Lead-side gap on the same assignment event,
+    // which stays separately open (out of scope here). A new, distinct type/helper rather than
+    // reusing notifyFaultAssigned (that one is addressed to the Team Lead, wrong recipient/
+    // wording for a customer) or notifyFaultCompletedToClient (wrong event entirely).
+    @Transactional
+    public void notifyFaultAssignedToCustomer(Long customerId, String customerFcmToken,
+                                               String faultNumber, Long faultId) {
+        notifyUser(customerId, customerFcmToken,
+            Notification.NotificationType.TECHNICIAN_ASSIGNED,
+            "Fault Assigned",
+            "Your fault #" + faultNumber + " has been assigned to a field team.",
+            faultId, "FAULT");
     }
 
     @Transactional
@@ -272,10 +391,14 @@ public class NotificationService {
     }
 
     @Transactional
-    public NotificationDTO markOneRead(Long notificationId) {
+    public NotificationDTO markOneRead(Long notificationId, Long callerId) {
         Notification n = notificationRepo.findById(notificationId)
             .orElseThrow(() -> new RuntimeException(
                 "Notification not found with id: " + notificationId));
+        if (n.getRecipientId() == null || !n.getRecipientId().equals(callerId)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "You do not have access to this notification.");
+        }
         n.setIsRead(true);
         n.setReadAt(LocalDateTime.now());
         return mapToDTO(notificationRepo.save(n));

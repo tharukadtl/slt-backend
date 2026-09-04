@@ -8,10 +8,12 @@ import lk.slt.fieldops.entity.Fault;
 import lk.slt.fieldops.entity.Job;
 import lk.slt.fieldops.entity.Payment;
 import lk.slt.fieldops.entity.PaymentApproval;
+import lk.slt.fieldops.entity.User;
 import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.JobRepository;
 import lk.slt.fieldops.repository.PaymentApprovalRepository;
 import lk.slt.fieldops.repository.PaymentRepository;
+import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
 import lk.slt.fieldops.websocket.WebSocketEventPublisher;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * PaymentService — full billing workflow.
@@ -28,7 +31,7 @@ import java.util.List;
  *   submitPayment()      → TL submits after job completion
  *   reviewPayment()      → Admin approves / rejects / adjusts
  *   getPendingPayments() → Admin queue
- *   getByBranch()        → Branch history
+ *   getByOpmc()          → OPMC history
  *   getByTeamLead()      → TL's submitted payments
  *   getForCustomer()     → Customer billing history
  *   getApprovalHistory() → Audit trail per payment
@@ -41,18 +44,27 @@ public class PaymentService {
     private final JobRepository             jobRepo;
     private final FaultRepository           faultRepo;
     private final WebSocketEventPublisher   webSocketEventPublisher;
+    private final UserRepository            userRepository;
+    private final NotificationService       notificationService;
 
     public PaymentService(PaymentRepository paymentRepo,
                           PaymentApprovalRepository approvalRepo,
                           JobRepository jobRepo,
                           FaultRepository faultRepo,
-                          WebSocketEventPublisher webSocketEventPublisher) {
+                          WebSocketEventPublisher webSocketEventPublisher,
+                          UserRepository userRepository,
+                          NotificationService notificationService) {
         this.paymentRepo  = paymentRepo;
         this.approvalRepo = approvalRepo;
         this.jobRepo      = jobRepo;
         this.faultRepo    = faultRepo;
         this.webSocketEventPublisher = webSocketEventPublisher;
+        this.userRepository = userRepository;
+        this.notificationService = notificationService;
     }
+
+    /** Billed total (LKR) at and above which a material justification is mandatory (PAY-004). */
+    private static final BigDecimal JUSTIFICATION_THRESHOLD = new BigDecimal("5000");
 
     // ══════════════════════════════════════════════════════════════════════════
     // 1. SUBMIT
@@ -93,11 +105,22 @@ public class PaymentService {
         BigDecimal labour     = computeLabourCharge(req);
         BigDecimal total      = chargeable.add(labour);
 
+        // PAY-004 — a high-value bill must carry a justification for what was charged.
+        // Enforced here rather than as a bean-validation annotation on SubmitPaymentRequest
+        // because the rule is cross-field and keys off totalAmount, which is computed
+        // server-side above (chargeable + labour) and never trusted from the client.
+        if (total.compareTo(JUSTIFICATION_THRESHOLD) >= 0
+                && (req.getMaterialJustification() == null || req.getMaterialJustification().isBlank())) {
+            throw new RuntimeException(
+                "A justification is required for a payment of LKR " + JUSTIFICATION_THRESHOLD
+                    + " or more. Total: LKR " + total);
+        }
+
         p.setJobId(req.getJobId());
         p.setJobNumber(job.getJobNumber());
         p.setFaultId(job.getFaultId());
         p.setFaultNumber(job.getFaultNumber());
-        p.setBranchId(fault.getBranchId());
+        p.setOpmcId(fault.getOpmcId());
         p.setCustomerId(job.getCustomerId());
         p.setCustomerName(job.getCustomerName());
         p.setTechnicianId(job.getTechnicianId());
@@ -125,7 +148,21 @@ public class PaymentService {
                 + " for Job #" + job.getJobNumber() + " — LKR " + total,
             "PAYMENT_SUBMITTED");
 
+        // QA_Compliance_Consolidated_Report.md — Stage G FCM Major: the sendToRole broadcast
+        // above is WebSocket-only, lost on any admin not currently connected. Mirrors
+        // FaultService.notifyAdminsOfNewFault's loop-over-admins shape for the same
+        // "broadcast to whichever admins are on shift" requirement.
+        notifyAdmins(admin -> notificationService.notifyPaymentSubmitted(
+            admin.getId(), admin.getFcmToken(), saved.getPaymentNumber(), saved.getId()));
+
         return saved;
+    }
+
+    private void notifyAdmins(java.util.function.Consumer<User> notify) {
+        List<User> admins = new java.util.ArrayList<>();
+        admins.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.ADMIN));
+        admins.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.SUPER_ADMIN));
+        admins.forEach(notify);
     }
 
     /**
@@ -179,6 +216,15 @@ public class PaymentService {
             notifyTeamLead(payment, "Payment Rejected",
                 "Payment " + payment.getPaymentNumber() + " was rejected. Reason: " + req.getReason());
 
+            // QA_Compliance_Consolidated_Report.md — notifyTeamLead above is WebSocket-only.
+            // NotificationService.notifyPaymentRejected already existed for this exact event
+            // but had zero callers anywhere.
+            if (payment.getTeamLeadId() != null) {
+                userRepository.findById(payment.getTeamLeadId()).ifPresent(tl ->
+                    notificationService.notifyPaymentRejected(tl.getId(), tl.getFcmToken(),
+                        payment.getPaymentNumber(), payment.getId(), req.getReason()));
+            }
+
         } else if ("CLARIFICATION_REQUESTED".equalsIgnoreCase(req.getDecision())) {
             if (req.getReason() == null || req.getReason().isBlank()) {
                 throw new RuntimeException("A reason is required when requesting clarification.");
@@ -196,6 +242,9 @@ public class PaymentService {
             payment.setApprovedByName(adminName);
             payment.setApprovedAt(LocalDateTime.now());
 
+            BigDecimal submittedAmount = payment.getTotalAmount();
+            boolean    wasAdjusted     = false;
+
             if (req.getAdjustedAmount() != null &&
                 req.getAdjustedAmount().compareTo(payment.getTotalAmount()) != 0) {
                 if (req.getReason() == null || req.getReason().isBlank()) {
@@ -204,6 +253,7 @@ public class PaymentService {
                 payment.setApprovedAmount(req.getAdjustedAmount());
                 approval.setAction(PaymentApproval.Action.ADJUSTED);
                 approval.setAdjustedAmount(req.getAdjustedAmount());
+                wasAdjusted = true;
             } else {
                 payment.setApprovedAmount(payment.getTotalAmount());
                 approval.setAction(PaymentApproval.Action.APPROVED);
@@ -211,6 +261,30 @@ public class PaymentService {
             approval.setReason(req.getReason());
             payment.setStatus(Payment.PaymentStatus.FINAL);
             payment.setBillReference(generateBillReference());
+
+            // The submitting Team Lead must learn the outcome of their submission — both that it
+            // cleared, and (separately) that an admin changed the amount they submitted.
+            if (wasAdjusted) {
+                notifyTeamLead(payment, "Payment Adjusted",
+                    "Payment " + payment.getPaymentNumber() + " was approved with an adjusted amount: LKR "
+                        + submittedAmount + " → LKR " + payment.getApprovedAmount()
+                        + ". Reason: " + req.getReason());
+            } else {
+                notifyTeamLead(payment, "Payment Approved",
+                    "Payment " + payment.getPaymentNumber() + " was approved. Amount: LKR "
+                        + payment.getApprovedAmount() + ". Bill reference: " + payment.getBillReference());
+            }
+
+            // QA_Compliance_Consolidated_Report.md — notifyTeamLead above is WebSocket-only.
+            // NotificationService.notifyPaymentApproved already existed for this exact event
+            // (both the adjusted and non-adjusted outcomes are still an "approved" payment
+            // from the submitting Team Lead's point of view) but had zero callers anywhere.
+            if (payment.getTeamLeadId() != null) {
+                userRepository.findById(payment.getTeamLeadId()).ifPresent(tl ->
+                    notificationService.notifyPaymentApproved(tl.getId(), tl.getFcmToken(),
+                        payment.getPaymentNumber(), payment.getId(),
+                        payment.getApprovedAmount().toString()));
+            }
 
             if (payment.getCustomerId() != null) {
                 webSocketEventPublisher.sendToUser(
@@ -267,6 +341,11 @@ public class PaymentService {
         payment.setStatus(Payment.PaymentStatus.DISPUTED);
 
         Payment saved = paymentRepo.save(payment);
+
+        // Keep the job OUT of Service History while the dispute is open. Both client lists
+        // (GET /api/issues, /api/issues/history) split purely on the linked FAULT's status, so
+        // the bill's own status cannot move the job — the fault has to move with it.
+        reopenLinkedFaultForDispute(payment, req.getCategory());
 
         // Notify Admin of the dispute (SRS 5.2.3), mirroring the submitPayment role-broadcast.
         webSocketEventPublisher.sendToRole("admin",
@@ -387,6 +466,11 @@ public class PaymentService {
         payment.setStatus(Payment.PaymentStatus.CLIENT_ACCEPTED);
         Payment saved = paymentRepo.save(payment);
 
+        // Close the job into Service History. Both client lists (GET /api/issues,
+        // /api/issues/history) split purely on the linked FAULT's status, so acceptance only
+        // reaches the client's list placement by driving the fault to its terminal state.
+        closeLinkedFaultOnAcceptance(payment);
+
         // Immutable audit trail entry for the acceptance. The actor is the CLIENT, so the
         // admin-shaped columns carry the customer's id / name / role. Acceptance changes no amount,
         // so originalAmount records the accepted amount and adjustedAmount stays null — consistent
@@ -412,6 +496,61 @@ public class PaymentService {
         return saved;
     }
 
+    // ── Bill state → linked fault state (FR-31: "Accept Bill closes job to history;
+    //    Report Issue keeps it open") ─────────────────────────────────────────────
+
+    /**
+     * Resolve the fault the bill belongs to. {@code payments.fault_id} is nullable (it was added
+     * after the table shipped), so fall back to the non-null {@code job_id} — which is where
+     * {@link #submitPayment} derives {@code faultId} from in the first place.
+     */
+    private Fault findLinkedFault(Payment payment) {
+        Long faultId = payment.getFaultId();
+        if (faultId == null && payment.getJobId() != null) {
+            faultId = jobRepo.findById(payment.getJobId()).map(Job::getFaultId).orElse(null);
+        }
+        return faultId == null ? null : faultRepo.findById(faultId).orElse(null);
+    }
+
+    /**
+     * A disputed bill means the job is not finished from the client's point of view, so pull the
+     * linked fault back out of its terminal COMPLETED state into HOLD — the codebase's "open but
+     * not being actively worked" bucket (see {@code ReportService}'s open = REPORTED/ASSIGNED/HOLD),
+     * which is what FR-31's "Report Issue keeps it open" describes. The dispute becomes the hold
+     * reason. A fault that is already non-terminal is already active and is left untouched; a
+     * CANCELLED fault is not resurrected, matching the terminal-fault guard
+     * {@code JobService.routeOpenJobsAtEod} / the rejection path use. Written straight through
+     * {@code faultRepo} for the same reason those paths are: this transition is not in
+     * {@code FaultService.validateTransition}'s table.
+     */
+    private void reopenLinkedFaultForDispute(Payment payment, String category) {
+        Fault fault = findLinkedFault(payment);
+        if (fault == null || fault.getStatus() != Fault.FaultStatus.COMPLETED) return;
+
+        fault.setStatus(Fault.FaultStatus.HOLD);
+        fault.setHoldReason("Bill " + payment.getPaymentNumber() + " disputed by client"
+            + (category != null ? " — " + category : ""));
+        faultRepo.save(fault);
+    }
+
+    /**
+     * Accepting the bill closes the cycle, so drive the linked fault to its terminal COMPLETED
+     * state — the status {@code IssueController} reads to place the job in Service History. Clears
+     * the hold reason {@link #reopenLinkedFaultForDispute} may have written, since that dispute is
+     * now settled. A CANCELLED fault is left alone (never revived into COMPLETED).
+     */
+    private void closeLinkedFaultOnAcceptance(Payment payment) {
+        Fault fault = findLinkedFault(payment);
+        if (fault == null
+                || fault.getStatus() == Fault.FaultStatus.COMPLETED
+                || fault.getStatus() == Fault.FaultStatus.CANCELLED) return;
+
+        fault.setStatus(Fault.FaultStatus.COMPLETED);
+        fault.setHoldReason(null);
+        if (fault.getCompletedAt() == null) fault.setCompletedAt(LocalDateTime.now());
+        faultRepo.save(fault);
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // READ METHODS
     // ══════════════════════════════════════════════════════════════════════════
@@ -419,20 +558,45 @@ public class PaymentService {
     @Transactional(readOnly = true)
     public Payment getById(Long id) { return findOrThrow(id); }
 
+    /** Unscoped — direct/internal callers only. Controller callers must use the overload below. */
     @Transactional(readOnly = true)
     public List<Payment> getPendingPayments() {
-        return paymentRepo.findByStatusOrderBySubmittedAtAsc(Payment.PaymentStatus.DRAFT);
+        return getPendingPayments(null);
     }
 
+    /**
+     * @param opmcFilter Stage F #2 (§A-4 expanded scope) — null means unscoped (Super Admin);
+     *                   otherwise only DRAFT payments belonging to this OPMC. Resolved by the
+     *                   caller via {@link lk.slt.fieldops.shared.OpmcAccessGuard#resolveOpmcFilter},
+     *                   never trusted from client input. Filtered in the service layer, mirroring
+     *                   {@code ReportService.generateFinancialSummary}'s identical Payment-scoping
+     *                   pattern, rather than a new repository query.
+     */
+    @Transactional(readOnly = true)
+    public List<Payment> getPendingPayments(Long opmcFilter) {
+        return paymentRepo.findByStatusOrderBySubmittedAtAsc(Payment.PaymentStatus.DRAFT).stream()
+            .filter(p -> opmcFilter == null || opmcFilter.equals(p.getOpmcId()))
+            .collect(Collectors.toList());
+    }
+
+    /** Unscoped — direct/internal callers only. Controller callers must use the overload below. */
     @Transactional(readOnly = true)
     public List<Payment> getAll() {
+        return getAll(null);
+    }
+
+    /** @param opmcFilter same semantics as {@link #getPendingPayments(Long)}. */
+    @Transactional(readOnly = true)
+    public List<Payment> getAll(Long opmcFilter) {
         return paymentRepo.findAll(org.springframework.data.domain.Sort.by(
-            org.springframework.data.domain.Sort.Direction.DESC, "submittedAt"));
+                org.springframework.data.domain.Sort.Direction.DESC, "submittedAt")).stream()
+            .filter(p -> opmcFilter == null || opmcFilter.equals(p.getOpmcId()))
+            .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
-    public List<Payment> getByBranch(Long branchId) {
-        return paymentRepo.findByBranchIdOrderBySubmittedAtDesc(branchId);
+    public List<Payment> getByOpmc(Long opmcId) {
+        return paymentRepo.findByOpmcIdOrderBySubmittedAtDesc(opmcId);
     }
 
     @Transactional(readOnly = true)

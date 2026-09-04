@@ -25,6 +25,11 @@
         <java.version>17</java.version>
         <poi.version>5.2.5</poi.version>
         <itext.version>8.0.3</itext.version>
+        <!-- Spring Boot 3.2.3's managed Testcontainers (1.19.5) predates this machine's Docker
+             Desktop (29.4.1) and can't complete the npipe handshake against it (BadRequestException
+             on the desktop-linux context's named pipe) — bumped forward for Docker Desktop
+             compatibility, everything else in the dependencyManagement BOM stays untouched. -->
+        <testcontainers.version>1.20.4</testcontainers.version>
     </properties>
 
     <dependencies>
@@ -74,8 +79,8 @@
 
         <!-- MySQL Driver -->
         <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
 
@@ -242,6 +247,26 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers — ephemeral real MySQL for tests instead of the persistent local dev
+             database (QA_Compliance_Consolidated_Report.md, CI-portable database investigation,
+             2026-09-02). Versions come from spring-boot-starter-parent's dependency management,
+             same as every other unversioned dependency in this file. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
             <scope>test</scope>
         </dependency>
 

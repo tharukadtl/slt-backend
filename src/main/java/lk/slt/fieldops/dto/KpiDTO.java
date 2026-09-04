@@ -82,7 +82,7 @@ public class KpiDTO {
         private LocalDate dueDate;
 
         private boolean isGroupTarget;
-        private Long branchId;
+        private Long opmcId;
     }
 
     // ─── Target Response ──────────────────────────────────
@@ -109,8 +109,8 @@ public class KpiDTO {
         private String assignedBy;
         private LocalDateTime assignedAt;
         private boolean isGroupTarget;
-        private Long branchId;
-        private String branchName;
+        private Long opmcId;
+        private String opmcName;
     }
 
     // ─── Personal KPI Score ───────────────────────────────
@@ -169,8 +169,8 @@ public class KpiDTO {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TeamKpiDTO {
-        private Long branchId;
-        private String branchName;
+        private Long opmcId;
+        private String opmcName;
         private String period;
         private String startDate;
         private String endDate;
@@ -206,7 +206,7 @@ public class KpiDTO {
         private String technicianName;
         private String phone;
         private String avatarInitial;
-        private String branchName;
+        private String opmcName;
         private double overallScore;
         private double completionRate;
         private double satisfactionScore;

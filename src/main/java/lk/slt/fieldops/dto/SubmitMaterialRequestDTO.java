@@ -8,7 +8,7 @@ import java.math.BigDecimal;
  * POST /api/inventory/requests
  * {
  *   "materialId":        5,
- *   "branchId":          1,
+ *   "opmcId":            1,
  *   "quantityRequested": 50,
  *   "reason":            "Running low on Cat6 cable for Colombo jobs",
  *   "jobId":             12   (optional)
@@ -19,8 +19,8 @@ public class SubmitMaterialRequestDTO {
     @NotNull(message = "Material ID is required")
     private Long materialId;
 
-    @NotNull(message = "Branch ID is required")
-    private Long branchId;
+    @NotNull(message = "OPMC ID is required")
+    private Long opmcId;
 
     @NotNull(message = "Quantity is required")
     private BigDecimal quantityRequested;
@@ -33,13 +33,13 @@ public class SubmitMaterialRequestDTO {
     public SubmitMaterialRequestDTO() {}
 
     public Long       getMaterialId()        { return materialId; }
-    public Long       getBranchId()          { return branchId; }
+    public Long       getOpmcId()            { return opmcId; }
     public BigDecimal getQuantityRequested() { return quantityRequested; }
     public String     getReason()            { return reason; }
     public Long       getJobId()             { return jobId; }
 
     public void setMaterialId(Long v)             { this.materialId        = v; }
-    public void setBranchId(Long v)               { this.branchId          = v; }
+    public void setOpmcId(Long v)                 { this.opmcId            = v; }
     public void setQuantityRequested(BigDecimal v){ this.quantityRequested  = v; }
     public void setReason(String v)               { this.reason            = v; }
     public void setJobId(Long v)                  { this.jobId             = v; }

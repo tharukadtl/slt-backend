@@ -1,9 +1,12 @@
 package lk.slt.fieldops.controller;
 
 import jakarta.validation.Valid;
+import lk.slt.fieldops.dto.MaterialDTO;
 import lk.slt.fieldops.dto.MaterialRequestDTO;
 import lk.slt.fieldops.dto.StockDTO;
 import lk.slt.fieldops.entity.Material;
+import lk.slt.fieldops.entity.User;
+import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.service.MaterialRequestService;
 import lk.slt.fieldops.service.StockManagementService;
 import lombok.RequiredArgsConstructor;
@@ -12,10 +15,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @RestController
@@ -25,6 +28,7 @@ public class InventoryController {
 
     private final MaterialRequestService materialRequestService;
     private final StockManagementService  stockManagementService;
+    private final UserRepository          userRepo;
 
     // ── Material Requests ─────────────────────────────────────────────────────
 
@@ -37,15 +41,35 @@ public class InventoryController {
         return ResponseEntity.ok(materialRequestService.submitRequest(userId, req));
     }
 
+    // SRS 5.5.3 (v1.9) — a Team Lead sees only their own Work Group's pending
+    // requests (mobile distribution UI); Admin/SuperAdmin see everything, unchanged.
     @GetMapping("/material-requests/pending")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<MaterialRequestDTO.PendingSummaryDTO> getPendingRequests() {
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<MaterialRequestDTO.PendingSummaryDTO> getPendingRequests(
+            @AuthenticationPrincipal Long userId) {
         log.info("GET /api/inventory/material-requests/pending");
+        boolean isTeamLead = SecurityContextHolder.getContext().getAuthentication()
+                .getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_TEAM_LEAD"));
+        if (isTeamLead) {
+            User caller = userRepo.findById(userId).orElse(null);
+            if (caller == null || caller.getWorkgroup() == null) {
+                return ResponseEntity.ok(MaterialRequestDTO.PendingSummaryDTO.builder()
+                        .totalPending(0).urgentCount(0).normalCount(0)
+                        .totalEstimatedValue(0).requests(List.of())
+                        .generatedAt(java.time.LocalDateTime.now())
+                        .build());
+            }
+            return ResponseEntity.ok(
+                    materialRequestService.getPendingRequestsForWorkGroup(caller.getWorkgroup().getId()));
+        }
         return ResponseEntity.ok(materialRequestService.getPendingRequests());
     }
 
+    // SRS 5.5.3 (v1.9) — a Team Lead may now approve their own Work Group's
+    // requests too (service-layer check enforces the Work Group boundary).
     @PostMapping("/material-requests/{id}/approve")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<MaterialRequestDTO.RequestResponse> approveRequest(
             @PathVariable Long id,
             @Valid @RequestBody MaterialRequestDTO.ApproveRequest req,
@@ -55,7 +79,7 @@ public class InventoryController {
     }
 
     @PostMapping("/material-requests/{id}/reject")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<MaterialRequestDTO.RequestResponse> rejectRequest(
             @PathVariable Long id,
             @Valid @RequestBody MaterialRequestDTO.RejectRequest req,
@@ -126,17 +150,27 @@ public class InventoryController {
     }
 
     @GetMapping("/stock/levels")
-    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD','TECHNICIAN')")
     public ResponseEntity<List<StockDTO.StockLevelDTO>> getAllStockLevels() {
         log.info("GET /api/inventory/stock/levels");
         return ResponseEntity.ok(stockManagementService.getAllStockLevels());
+    }
+
+    // ── Technician/Team Lead inventory browser: search by name/SKU + category filter ──
+    @GetMapping("/materials/search")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<StockDTO.StockLevelDTO>> searchMaterials(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) Long categoryId) {
+        log.info("GET /api/inventory/materials/search search={}, categoryId={}", search, categoryId);
+        return ResponseEntity.ok(stockManagementService.searchStockLevels(search, categoryId));
     }
 
     // ── Material CRUD ─────────────────────────────────────────────────────────
 
     @PostMapping("/materials")
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<Material> createMaterial(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<Material> createMaterial(@Valid @RequestBody MaterialDTO.CreateRequest body) {
         log.info("POST /api/inventory/materials");
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(stockManagementService.createMaterial(body));
@@ -146,7 +180,7 @@ public class InventoryController {
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ResponseEntity<Material> updateMaterial(
             @PathVariable Long id,
-            @RequestBody Map<String, Object> body) {
+            @Valid @RequestBody MaterialDTO.UpdateRequest body) {
         log.info("PUT /api/inventory/materials/{}", id);
         return ResponseEntity.ok(stockManagementService.updateMaterial(id, body));
     }

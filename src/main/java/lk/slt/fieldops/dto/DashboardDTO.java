@@ -66,9 +66,9 @@ public class DashboardDTO {
         private List<PriorityCountDTO>
                 byPriority;
 
-        // By branch
-        private List<BranchCountDTO>
-                byBranch;
+        // By OPMC
+        private List<OpmcCountDTO>
+                byOpmc;
     }
 
     // ─── Category Count ───────────────────────────────────
@@ -95,13 +95,13 @@ public class DashboardDTO {
         private String color;
     }
 
-    // ─── Branch Count ─────────────────────────────────────
+    // ─── OPMC Count ───────────────────────────────────────
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class BranchCountDTO {
-        private String branchName;
+    public static class OpmcCountDTO {
+        private String opmcName;
         private long count;
         private double percentage;
     }

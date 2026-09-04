@@ -2,21 +2,30 @@ package lk.slt.fieldops.service;
 
 import lk.slt.fieldops.dto.LocationResponseDTO;
 import lk.slt.fieldops.dto.LocationUpdateRequest;
+import lk.slt.fieldops.dto.ShortestPathRequest;
+import lk.slt.fieldops.dto.ShortestPathResponseDTO;
 import lk.slt.fieldops.entity.TechnicianLocation;
 import lk.slt.fieldops.entity.User;
 import lk.slt.fieldops.repository
         .TechnicianLocationRepository;
+import lk.slt.fieldops.repository.DaySessionMemberRepository;
+import lk.slt.fieldops.repository.JobRepository;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.websocket
         .WebSocketEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation
         .Transactional;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -28,11 +37,27 @@ public class LocationService {
     private final TechnicianLocationRepository
             locationRepository;
     private final UserRepository userRepository;
+    private final JobRepository jobRepository;
+    private final DaySessionMemberRepository daySessionMemberRepository;
     private final WebSocketEventPublisher
             webSocketEventPublisher;
+    private final RestTemplate restTemplate;
+
+    /** Used to call the Flask AI module for FR-29 shortest-path navigation — same property ReportService uses. */
+    @Value("${app.ai.base-url:http://localhost:5000}")
+    private String aiBaseUrl;
 
     // Active = updated within last 30 minutes
     private static final int ACTIVE_MINUTES = 30;
+
+    // Sri Lanka bounding box (FAULT-018) — mirrors slt-ai-module's Config.SL_LAT_MIN/MAX
+    // and SL_LNG_MIN/MAX (utils/validators.py), the only other place these bounds are
+    // enforced. LocationUpdateRequest's @DecimalMin/@DecimalMax are global -90..90/-180..180
+    // and don't reject foreign coordinates, so a technician ping is checked again here.
+    private static final double SL_LAT_MIN = 5.9;
+    private static final double SL_LAT_MAX = 9.9;
+    private static final double SL_LNG_MIN = 79.5;
+    private static final double SL_LNG_MAX = 81.9;
 
     // ─── Update Location ──────────────────────────────────
 
@@ -47,6 +72,9 @@ public class LocationService {
                 request.getLatitude(),
                 request.getLongitude());
 
+        validateSriLankaCoords(
+                request.getLatitude(), request.getLongitude());
+
         User user = userRepository
                 .findById(userId)
                 .orElseThrow(() ->
@@ -54,7 +82,10 @@ public class LocationService {
                                 "User not found: "
                                         + userId));
 
-        // Deactivate previous location records
+        // Deactivate previous location records. Defensive only: from here on there is at
+        // most one row per technician, but dev data can still hold duplicates created before
+        // this method became an upsert, and every read path (findActiveByUserId) assumes a
+        // single active row per technician.
         locationRepository
                 .deactivateAllByUserId(userId);
 
@@ -62,24 +93,28 @@ public class LocationService {
         TechnicianLocation.TechnicianStatus status =
                 resolveStatus(request.getStatus());
 
-        // Save new location
-        TechnicianLocation location =
-                TechnicianLocation.builder()
-                        .user(user)
-                        .latitude(request.getLatitude())
-                        .longitude(
-                                request.getLongitude())
-                        .address(request.getAddress())
-                        .speed(request.getSpeed())
-                        .heading(request.getHeading())
-                        .accuracy(request.getAccuracy())
-                        .currentJobId(
-                                request.getCurrentJobId())
-                        .technicianStatus(status)
-                        .isActive(true)
-                        .lastUpdated(
-                                LocalDateTime.now())
-                        .build();
+        // Upsert: reuse the technician's existing row if there is one, otherwise create it,
+        // so repeated GPS pings update in place instead of growing the table forever.
+        TechnicianLocation location = locationRepository
+                .findFirstByUser_IdOrderByLastUpdatedDesc(
+                        userId)
+                .orElseGet(() ->
+                        TechnicianLocation.builder()
+                                .user(user)
+                                .build());
+
+        location.setUser(user);
+        location.setLatitude(request.getLatitude());
+        location.setLongitude(request.getLongitude());
+        location.setAddress(request.getAddress());
+        location.setSpeed(request.getSpeed());
+        location.setHeading(request.getHeading());
+        location.setAccuracy(request.getAccuracy());
+        location.setCurrentJobId(
+                request.getCurrentJobId());
+        location.setTechnicianStatus(status);
+        location.setIsActive(true);
+        location.setLastUpdated(LocalDateTime.now());
 
         TechnicianLocation saved =
                 locationRepository.save(location);
@@ -101,14 +136,34 @@ public class LocationService {
         return mapToDTO(saved);
     }
 
+    // Rejects missing or out-of-Sri-Lanka coordinates before anything is persisted or
+    // broadcast, instead of letting a null unbox into an NPE downstream (the previous
+    // behaviour) or storing a foreign position as a valid technician location.
+    private void validateSriLankaCoords(Double latitude, Double longitude) {
+        if (latitude == null || longitude == null) {
+            throw new RuntimeException(
+                    "Latitude and longitude are required for a location update.");
+        }
+        if (latitude < SL_LAT_MIN || latitude > SL_LAT_MAX
+                || longitude < SL_LNG_MIN || longitude > SL_LNG_MAX) {
+            throw new RuntimeException(
+                    "Location (" + latitude + ", " + longitude
+                            + ") is outside Sri Lanka bounds (lat "
+                            + SL_LAT_MIN + ".." + SL_LAT_MAX + ", lng "
+                            + SL_LNG_MIN + ".." + SL_LNG_MAX + ").");
+        }
+    }
+
     // ─── Get Technician Location ──────────────────────────
 
     public LocationResponseDTO
-    getTechnicianLocation(Long technicianId) {
+    getTechnicianLocation(Long callerId, Long technicianId) {
         log.debug(
                 "Getting location for "
-                        + "technicianId={}",
-                technicianId);
+                        + "technicianId={}, requested by callerId={}",
+                technicianId, callerId);
+
+        assertCanViewTechnicianLocation(callerId, technicianId);
 
         TechnicianLocation location =
                 locationRepository
@@ -120,6 +175,48 @@ public class LocationService {
                                                 + technicianId));
 
         return mapToDTO(location);
+    }
+
+    // Same as getTechnicianLocation, but also fills in distanceKm/estimatedArrival
+    // against a target point (e.g. the fault/job site) using the same
+    // haversine + 30km/h average-speed formula used for getNearbyTechnicians.
+    public LocationResponseDTO getTechnicianLocationWithEta(
+            Long callerId, Long technicianId, double targetLat, double targetLng) {
+        LocationResponseDTO dto = getTechnicianLocation(callerId, technicianId);
+        if (dto.getLatitude() != null && dto.getLongitude() != null) {
+            double dist = lk.slt.fieldops.shared.GeoUtils.haversineKm(dto.getLatitude(), dto.getLongitude(), targetLat, targetLng);
+            int etaMinutes = (int) ((dist / 30.0) * 60);
+            dto.setDistanceKm(Math.round(dist * 100.0) / 100.0);
+            dto.setEstimatedArrival(etaMinutes + " mins");
+        }
+        return dto;
+    }
+
+    // Guard: a caller may only view a technician's live location if they're
+    // an admin, the technician's own team lead, or a client with an active
+    // job assigned to that technician — not any authenticated user by ID.
+    private void assertCanViewTechnicianLocation(Long callerId, Long technicianId) {
+        User caller = userRepository.findById(callerId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + callerId));
+        User.Role role = caller.getRole();
+
+        if (role == User.Role.ADMIN || role == User.Role.SUPER_ADMIN) {
+            return;
+        }
+        if (role == User.Role.TEAM_LEAD) {
+            daySessionMemberRepository.findActiveMemberForTeamLeadToday(callerId, technicianId)
+                    .orElseThrow(() -> new RuntimeException(
+                            "Technician #" + technicianId + " is not on your team's active session today."));
+            return;
+        }
+        if (role == User.Role.CLIENT) {
+            if (!jobRepository.existsActiveJobForCustomerAndTechnician(callerId, technicianId)) {
+                throw new RuntimeException(
+                        "Technician #" + technicianId + " is not assigned to any of your active jobs.");
+            }
+            return;
+        }
+        throw new RuntimeException("You are not authorized to view this technician's location.");
     }
 
     // ─── Get All Active Locations ─────────────────────────
@@ -190,15 +287,15 @@ public class LocationService {
     // ─── Get Team Locations ───────────────────────────────
 
     public LocationResponseDTO.TeamLocationDTO
-    getTeamLocations(Long branchId) {
+    getTeamLocations(Long opmcId) {
         log.debug(
                 "Getting team locations for "
-                        + "branchId={}",
-                branchId);
+                        + "opmcId={}",
+                opmcId);
 
         List<TechnicianLocation> locations =
                 locationRepository
-                        .findActiveByBranchId(branchId);
+                        .findActiveByOpmcId(opmcId);
 
         List<LocationResponseDTO> dtos = locations
                 .stream()
@@ -217,8 +314,8 @@ public class LocationService {
 
         return LocationResponseDTO.TeamLocationDTO
                 .builder()
-                .teamId(branchId)
-                .teamName("Branch " + branchId)
+                .teamId(opmcId)
+                .teamName("OPMC " + opmcId)
                 .memberCount(locations.size())
                 .activeCount((int) activeCount)
                 .members(dtos)
@@ -245,7 +342,7 @@ public class LocationService {
 
         return nearby.stream()
                 .map(loc -> {
-                    double dist = calculateDistance(
+                    double dist = lk.slt.fieldops.shared.GeoUtils.haversineKm(
                             latitude, longitude,
                             loc.getLatitude(),
                             loc.getLongitude());
@@ -284,6 +381,76 @@ public class LocationService {
                                 a.getDistanceKm(),
                                 b.getDistanceKm()))
                 .collect(Collectors.toList());
+    }
+
+    // ─── Shortest-Path Navigation (FR-29, SRS 5.6.6) ──────
+    //
+    // Thin proxy to the Flask AI module's POST /api/ai/shortest-path —
+    // same aiBaseUrl + RestTemplate pattern ReportService already uses
+    // for /api/ai/predictions and /api/ai/clusters. The mobile apps have
+    // no direct network path to the AI module (only to this backend), so
+    // this exists purely to make that endpoint reachable from mobile via
+    // the connection it already has.
+
+    @SuppressWarnings("unchecked")
+    public ShortestPathResponseDTO getShortestPathToFault(ShortestPathRequest request) {
+        String url = aiBaseUrl + "/api/ai/shortest-path";
+        Map<String, Object> body = Map.of(
+                "currentLat", request.getCurrentLat(),
+                "currentLng", request.getCurrentLng(),
+                "faultLat",   request.getFaultLat(),
+                "faultLng",   request.getFaultLng()
+        );
+
+        Map<String, Object> resp;
+        try {
+            resp = restTemplate.postForObject(url, body, Map.class);
+        } catch (HttpClientErrorException e) {
+            // AI module validated the request and rejected it (e.g. out-of-bounds
+            // coords) — surface its message rather than a generic failure.
+            throw new RuntimeException(extractAiErrorMessage(e));
+        } catch (RestClientException e) {
+            log.warn("AI module unavailable for shortest-path: {}", e.getMessage());
+            throw new RuntimeException("Shortest-path service is temporarily unavailable.");
+        }
+
+        Object data = resp != null ? resp.get("data") : null;
+        if (!(data instanceof Map)) {
+            throw new RuntimeException("AI module returned an unexpected response.");
+        }
+        Map<String, Object> d = (Map<String, Object>) data;
+
+        List<Map<String, Object>> rawWaypoints = (List<Map<String, Object>>) d.get("waypoints");
+        List<ShortestPathResponseDTO.Waypoint> waypoints = rawWaypoints == null
+                ? List.of()
+                : rawWaypoints.stream()
+                        .map(w -> ShortestPathResponseDTO.Waypoint.builder()
+                                .lat(((Number) w.get("lat")).doubleValue())
+                                .lng(((Number) w.get("lng")).doubleValue())
+                                .build())
+                        .collect(Collectors.toList());
+
+        return ShortestPathResponseDTO.builder()
+                .waypoints(waypoints)
+                .distanceKm(d.get("distanceKm") != null ? ((Number) d.get("distanceKm")).doubleValue() : null)
+                .etaMinutes(d.get("etaMinutes") != null ? ((Number) d.get("etaMinutes")).intValue() : null)
+                .routed(Boolean.TRUE.equals(d.get("routed")))
+                .algorithm(d.get("algorithm") != null ? d.get("algorithm").toString() : null)
+                .avgSpeedKmh(d.get("avgSpeedKmh") != null ? ((Number) d.get("avgSpeedKmh")).doubleValue() : null)
+                .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private String extractAiErrorMessage(HttpClientErrorException e) {
+        try {
+            Map<String, Object> body = e.getResponseBodyAs(Map.class);
+            if (body != null && body.get("error") != null) {
+                return body.get("error").toString();
+            }
+        } catch (Exception ignored) {
+            // Fall through to generic message below.
+        }
+        return "Invalid location data.";
     }
 
     // ─── Mark Offline ─────────────────────────────────────
@@ -346,27 +513,4 @@ public class LocationService {
         }
     }
 
-    // ─── Haversine Distance ───────────────────────────────
-
-    private double calculateDistance(
-            double lat1, double lon1,
-            double lat2, double lon2) {
-        final double R = 6371.0;
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a =
-                Math.sin(dLat / 2)
-                        * Math.sin(dLat / 2)
-                        + Math.cos(
-                        Math.toRadians(lat1))
-                        * Math.cos(
-                        Math.toRadians(lat2))
-                        * Math.sin(dLon / 2)
-                        * Math.sin(dLon / 2);
-        double c =
-                2 * Math.atan2(
-                        Math.sqrt(a),
-                        Math.sqrt(1 - a));
-        return R * c;
-    }
 }

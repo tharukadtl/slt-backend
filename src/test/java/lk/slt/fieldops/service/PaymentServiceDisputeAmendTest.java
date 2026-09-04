@@ -2,12 +2,14 @@ package lk.slt.fieldops.service;
 
 import lk.slt.fieldops.dto.AmendBillRequest;
 import lk.slt.fieldops.dto.ReportDisputeRequest;
+import lk.slt.fieldops.dto.ReviewPaymentRequest;
 import lk.slt.fieldops.entity.Payment;
 import lk.slt.fieldops.entity.PaymentApproval;
 import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.JobRepository;
 import lk.slt.fieldops.repository.PaymentApprovalRepository;
 import lk.slt.fieldops.repository.PaymentRepository;
+import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.websocket.WebSocketEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,6 +51,8 @@ class PaymentServiceDisputeAmendTest {
     @Mock private JobRepository             jobRepo;
     @Mock private FaultRepository           faultRepo;
     @Mock private WebSocketEventPublisher   webSocketEventPublisher;
+    @Mock private UserRepository            userRepository;
+    @Mock private NotificationService       notificationService;
 
     @InjectMocks private PaymentService paymentService;
 
@@ -221,6 +225,133 @@ class PaymentServiceDisputeAmendTest {
 
         verify(paymentRepo, never()).save(any());
         verify(approvalRepo, never()).save(any());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Sheet 04_PAYMENT_FLOW — PAY-019 / PAY-020
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * PAY-019 — the Admin's dispute queue and the standard approval queue must stay genuinely
+     * separate, so a disputed bill can never be approved through the normal flow.
+     *
+     * <p><b>Endpoint note.</b> The row calls {@code GET /api/payments/disputes} "(or equivalent
+     * filter)". There is no such endpoint: the Admin portal's Bill Disputes tab is a client-side
+     * filter over {@code GET /api/payments/all} for {@code status === 'DISPUTED'}
+     * (frontend-admin {@code PaymentsPage.js} {@code DisputesTab}), exactly as its own comment
+     * says. The queue that must NOT contain the disputed bill is the server-side one —
+     * {@link PaymentService#getPendingPayments()} behind {@code GET /api/payments/pending} — so
+     * the isolation is asserted at that seam, plus the equivalent filter for the dispute side.</p>
+     */
+    @Test
+    void disputeQueueIsolatedFromApproval() {
+        Payment disputed = finalBill();
+        disputed.setStatus(Payment.PaymentStatus.DISPUTED);
+
+        Payment awaitingApproval = finalBill();
+        awaitingApproval.setId(43L);
+        awaitingApproval.setPaymentNumber("PAY-2026-00043");
+        awaitingApproval.setStatus(Payment.PaymentStatus.DRAFT);
+
+        Payment approved = finalBill();   // FINAL — already reviewed
+        approved.setId(44L);
+
+        // The approval queue is defined as DRAFT-only.
+        when(paymentRepo.findByStatusOrderBySubmittedAtAsc(Payment.PaymentStatus.DRAFT))
+            .thenReturn(List.of(awaitingApproval));
+        when(paymentRepo.findAll(any(org.springframework.data.domain.Sort.class)))
+            .thenReturn(List.of(disputed, awaitingApproval, approved));
+
+        // ── The standard approval queue must NOT contain the disputed bill ───────
+        List<Payment> approvalQueue = paymentService.getPendingPayments();
+        assertEquals(1, approvalQueue.size(),
+            "The approval queue must hold only the one DRAFT payment, was " + approvalQueue.size());
+        assertTrue(approvalQueue.stream().noneMatch(p -> p.getStatus() == Payment.PaymentStatus.DISPUTED),
+            "A DISPUTED bill must never appear in the standard approval queue — it could then be "
+                + "approved through the normal flow instead of being amended");
+        assertEquals(Payment.PaymentStatus.DRAFT, approvalQueue.get(0).getStatus());
+
+        // ── The dispute queue must contain only DISPUTED bills ──────────────────
+        List<Payment> disputeQueue = paymentService.getAll().stream()
+            .filter(p -> p.getStatus() == Payment.PaymentStatus.DISPUTED)
+            .toList();
+        assertEquals(1, disputeQueue.size(),
+            "The dispute queue must hold exactly the one DISPUTED bill, was " + disputeQueue.size());
+        assertEquals(PAYMENT_ID, disputeQueue.get(0).getId());
+
+        // ── The two queues are disjoint ─────────────────────────────────────────
+        assertTrue(disputeQueue.stream().noneMatch(approvalQueue::contains),
+            "No bill may sit in both queues at once");
+
+        // ── And the isolation is enforced, not merely presentational: reviewing a
+        //    DISPUTED bill through the approval path is refused outright. ─────────
+        when(paymentRepo.findById(PAYMENT_ID)).thenReturn(Optional.of(disputed));
+        ReviewPaymentRequest approve = new ReviewPaymentRequest();
+        approve.setDecision("APPROVED");
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
+            paymentService.reviewPayment(PAYMENT_ID, approve, ADMIN_ID, ADMIN_NAME),
+            "A DISPUTED bill must not be approvable through the standard review flow");
+        assertTrue(ex.getMessage().contains("already reviewed"), ex.getMessage());
+        verify(approvalRepo, never()).save(any());
+    }
+
+    /**
+     * PAY-020 — amending a disputed bill requires a justification; a blank one is rejected, and a
+     * filled one moves the bill to PENDING_CLIENT_REVIEW and re-notifies the client.
+     *
+     * <p><b>Layer note.</b> The row drives this over HTTP ({@code PATCH
+     * /api/payments/{id}/amend} -&gt; 400, then 200). The blank-justification rejection is a bean
+     * validation constraint — {@code AmendBillRequest.justification} is {@code @NotBlank} and the
+     * controller method is {@code @Valid} — so it is asserted here against a real
+     * {@link jakarta.validation.Validator}, which is the layer that actually produces that 400,
+     * rather than being faked at the service. The 200 half is driven through the real
+     * {@link PaymentService#amendBill}. Role/ownership enforcement on the same endpoint is covered
+     * end-to-end by {@code BillDisputeAmendmentIntegrationTest.check2_amend_byNonAdminRole_isForbidden}.</p>
+     */
+    @Test
+    void amendRequiresJustification() {
+        try (jakarta.validation.ValidatorFactory factory =
+                 jakarta.validation.Validation.buildDefaultValidatorFactory()) {
+            jakarta.validation.Validator validator = factory.getValidator();
+
+            // ── Step 1-2: a blank justification is rejected before the service is reached ──
+            for (String blank : new String[] {null, "", "   "}) {
+                AmendBillRequest bad = amend("4000.00", "0.00", blank);
+                var violations = validator.validate(bad);
+                assertFalse(violations.isEmpty(),
+                    "A " + (blank == null ? "null" : "'" + blank + "'")
+                        + " justification must be rejected (HTTP 400), but the request validated cleanly");
+                assertTrue(violations.stream()
+                        .anyMatch(v -> "justification".equals(v.getPropertyPath().toString())),
+                    "The violation must be on the justification field, was: " + violations);
+            }
+
+            // ── Step 3: the same request WITH a justification validates cleanly ──
+            AmendBillRequest good =
+                amend("4000.00", "0.00", "Removed duplicate material line");
+            assertTrue(validator.validate(good).isEmpty(),
+                "A filled justification must validate cleanly: " + validator.validate(good));
+
+            // ── Step 4: and the amendment moves the bill to PENDING_CLIENT_REVIEW ──
+            Payment bill = finalBill();
+            bill.setStatus(Payment.PaymentStatus.DISPUTED);
+            when(paymentRepo.findById(PAYMENT_ID)).thenReturn(Optional.of(bill));
+            when(paymentRepo.save(any(Payment.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            Payment amended = paymentService.amendBill(PAYMENT_ID, good, ADMIN_ID, ADMIN_NAME);
+
+            assertEquals(Payment.PaymentStatus.PENDING_CLIENT_REVIEW, amended.getStatus(),
+                "A valid amendment must move the bill to PENDING_CLIENT_REVIEW");
+            assertEquals(0, amended.getApprovedAmount().compareTo(new BigDecimal("4000")),
+                "The adjusted amount 4000 must be applied, was " + amended.getApprovedAmount());
+            assertEquals("Removed duplicate material line", amended.getAmendmentJustification(),
+                "The justification must be stored on the bill");
+
+            // The client is re-notified that an amended bill awaits review.
+            verify(webSocketEventPublisher)
+                .sendToUser(eq(CLIENT_ID.toString()), any(), any(), eq("BILL_AMENDED"));
+        }
     }
 
     /** Guard: an amendment is only allowed from DISPUTED (mirrors the FINAL-state rejection). */

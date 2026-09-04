@@ -10,17 +10,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-// Fields split into two groups:
-// - "legacy" fields used by KpiCalculationService (user, totalJobs, completionRate, etc.)
-// - "new" fields used by KpiService scheduler (technicianId, jobsAssigned, slaCompliancePercent, etc.)
-
 @Entity
 @Table(name = "kpi_scores",
         indexes = {
                 @Index(name = "idx_kpi_score_tech",    columnList = "technician_id"),
                 @Index(name = "idx_kpi_score_period",  columnList = "period"),
                 @Index(name = "idx_kpi_score_date",    columnList = "score_date"),
-                @Index(name = "idx_kpi_score_branch",  columnList = "branch_id")
+                @Index(name = "idx_kpi_score_opmc",    columnList = "opmc_id")
         })
 @Data
 @Builder
@@ -48,8 +44,8 @@ public class KpiScore {
     @Column(name = "technician_name", length = 150)
     private String technicianName;
 
-    @Column(name = "branch_id")
-    private Long branchId;
+    @Column(name = "opmc_id")
+    private Long opmcId;
 
     // ─── Period ───────────────────────────────────────────
     @Column(name = "period", nullable = false, length = 20)
