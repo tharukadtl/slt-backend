@@ -94,7 +94,8 @@ import static org.mockito.Mockito.*;
  *
  * <p><b>Why {@code fcmClient} is never mocked, despite the sheet's Assertion Code.</b> There is no
  * {@code FcmClient} type in this codebase and no {@code FcmMessage}. The push is
- * {@code NotificationService.sendPush(fcmToken, title, body)}, calling the static
+ * {@code NotificationService.sendPush(fcmToken, title, body, type, referenceId, referenceType)},
+ * calling the static
  * {@code FirebaseMessaging.getInstance()} directly, and it short-circuits with a log line whenever
  * {@code app.firebase.enabled} is false or no {@code FirebaseApp} is initialised — which is always,
  * here. The assertable contract is therefore the {@link NotificationService} call and the row it

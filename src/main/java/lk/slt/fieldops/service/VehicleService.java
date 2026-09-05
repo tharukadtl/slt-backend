@@ -173,10 +173,19 @@ public class VehicleService {
 
         assignment.setEodOdometer(eodOdometer);
 
-        // Auto-calculate distance driven today
+        // Auto-calculate distance driven today. An EOD reading below the BOD reading is
+        // impossible (a real drive never subtracts kilometres) — rejected as invalid input
+        // rather than clamped to 0, which would erase the evidence of a mistyped or
+        // fraudulent reading.
         if (assignment.getBodOdometer() != null) {
             int distance = eodOdometer - assignment.getBodOdometer();
-            assignment.setDistanceKm(Math.max(0, distance));
+            if (distance < 0) {
+                throw new RuntimeException(
+                        "Ending odometer reading (" + eodOdometer
+                                + ") cannot be less than the starting reading ("
+                                + assignment.getBodOdometer() + ").");
+            }
+            assignment.setDistanceKm(distance);
         }
 
         // Update vehicle's current odometer

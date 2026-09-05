@@ -66,11 +66,18 @@ public class NotificationService {
     /**
      * Sends a Firebase push notification to one device.
      *
-     * @param fcmToken  device FCM token (stored in users.fcm_token column)
-     * @param title     notification title shown on device
-     * @param body      notification body text
+     * @param fcmToken      device FCM token (stored in users.fcm_token column)
+     * @param title         notification title shown on device
+     * @param body          notification body text
+     * @param type          one of the NotificationType enum values — carried in the FCM data
+     *                      payload so a tap can be routed without a second network call
+     * @param referenceId   the related entity ID (jobId, faultId, paymentId, etc.)
+     * @param referenceType "JOB", "FAULT", "PAYMENT", "MATERIAL_REQUEST", etc.
      */
-    public void sendPush(String fcmToken, String title, String body) {
+    public void sendPush(String fcmToken, String title, String body,
+                          Notification.NotificationType type,
+                          Long referenceId,
+                          String referenceType) {
         if (fcmToken == null || fcmToken.isBlank()) {
             log.warning("sendPush skipped — FCM token is null or blank.");
             return;
@@ -83,16 +90,24 @@ public class NotificationService {
         }
 
         try {
-            Message message = Message.builder()
+            Message.Builder builder = Message.builder()
                 .setToken(fcmToken)
                 .setNotification(
                     com.google.firebase.messaging.Notification.builder()
                         .setTitle(title)
                         .setBody(body)
                         .build()
-                )
-                .build();
-            String response = FirebaseMessaging.getInstance().send(message);
+                );
+            if (type != null) {
+                builder.putData("type", type.name());
+            }
+            if (referenceId != null) {
+                builder.putData("referenceId", String.valueOf(referenceId));
+            }
+            if (referenceType != null) {
+                builder.putData("referenceType", referenceType);
+            }
+            String response = FirebaseMessaging.getInstance().send(builder.build());
             log.info("Push sent OK. FCM response: " + response);
         } catch (FirebaseMessagingException e) {
             log.severe("Firebase push failed: " + e.getMessage());
@@ -145,7 +160,7 @@ public class NotificationService {
                             Long referenceId,
                             String referenceType) {
         saveInApp(recipientId, type, title, body, referenceId, referenceType);
-        sendPush(fcmToken, title, body);
+        sendPush(fcmToken, title, body, type, referenceId, referenceType);
     }
 
     // ══════════════════════════════════════════════════════════════════════════

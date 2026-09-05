@@ -52,6 +52,13 @@ public class CheckInOut {
             length = 500)
     private String checkInAddress;
 
+    // ATT-008 — daily mileage. Nullable: entity-mapped new columns, so
+    // ddl-auto=update creates them on every environment (dev, prod, a fresh
+    // Testcontainers run) with no migration script needed — see
+    // migrations/README.md's own rule for what does vs. doesn't need one.
+    @Column(name = "odometer_start")
+    private Integer odometerStart;
+
     // ─── Check-Out ────────────────────────────────────────
     @Column(name = "check_out_time")
     private LocalDateTime checkOutTime;
@@ -65,6 +72,9 @@ public class CheckInOut {
     @Column(name = "check_out_address",
             length = 500)
     private String checkOutAddress;
+
+    @Column(name = "odometer_end")
+    private Integer odometerEnd;
 
     // ─── Day Session Link (nullable — individual tech check-ins have no session) ─
     @Column(name = "session_id")

@@ -102,6 +102,7 @@ public class AttendanceService {
                 request.getAddress());
         checkIn.setNotes(request.getNotes());
         checkIn.setStatus("CHECKED_IN");
+        checkIn.setOdometerStart(request.getOdometerStart());
 
         CheckInOut saved =
                 checkInOutRepository.save(checkIn);
@@ -205,6 +206,7 @@ public class AttendanceService {
         checkIn.setCheckOutAddress(
                 request.getAddress());
         checkIn.setStatus("CHECKED_OUT");
+        checkIn.setOdometerEnd(request.getOdometerEnd());
 
         if (request.getJobsCompleted() != null) {
             checkIn.setJobsCompleted(
@@ -651,6 +653,27 @@ public class AttendanceService {
                 .build();
     }
 
+    // ─── Daily Mileage (ATT-008) ───────────────────────────
+
+    /**
+     * Distance driven today, from the day's two odometer readings. Null until both readings
+     * exist (e.g. mid-day, before EOD) — not a false "0 km" default. An EOD reading below the
+     * BOD reading is impossible (a real drive never subtracts kilometres) and is rejected as
+     * invalid input rather than silently clamped to 0, which would erase the evidence of a
+     * mistyped or fraudulent reading.
+     */
+    public Integer getDailyMileage(Integer odometerStart, Integer odometerEnd) {
+        if (odometerStart == null || odometerEnd == null) {
+            return null;
+        }
+        if (odometerEnd < odometerStart) {
+            throw new RuntimeException(
+                    "Ending odometer reading (" + odometerEnd
+                            + ") cannot be less than the starting reading (" + odometerStart + ").");
+        }
+        return odometerEnd - odometerStart;
+    }
+
     // ─── Map Entity to DTO ────────────────────────────────
 
     private AttendanceDTO.AttendanceResponse
@@ -694,6 +717,9 @@ public class AttendanceService {
                         record.getCheckOutLongitude())
                 .checkOutAddress(
                         record.getCheckOutAddress())
+                .odometerStart(record.getOdometerStart())
+                .odometerEnd(record.getOdometerEnd())
+                .distanceKm(getDailyMileage(record.getOdometerStart(), record.getOdometerEnd()))
                 .status(record.getStatus())
                 .workingDurationMinutes(workMinutes)
                 .workingDurationFormatted(

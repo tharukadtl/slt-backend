@@ -70,7 +70,9 @@ public class NotificationController {
     public ResponseEntity<Map<String, String>> sendPush(
             @Valid @RequestBody SendPushRequest request) {
         notificationService.sendPush(
-            request.getFcmToken(), request.getTitle(), request.getBody());
+            request.getFcmToken(), request.getTitle(), request.getBody(),
+            Notification.NotificationType.GENERAL,
+            request.getReferenceId(), request.getReferenceType());
         if (request.getRecipientId() != null) {
             notificationService.saveInApp(
                 request.getRecipientId(),

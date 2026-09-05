@@ -44,6 +44,13 @@ public class AttendanceDTO {
         private String address;
         private String deviceInfo;
         private String notes;
+
+        // ATT-008 — starting odometer reading, required client-side before
+        // BOD check-in completes (see HomeScreen.tsx's handleBODCheckIn).
+        // Nullable here, same as latitude/longitude above: the backend
+        // accepts what the client sends rather than duplicating client-side
+        // gating as a hard server validation.
+        private Integer odometerStart;
     }
 
     // ─── Check-Out Request ────────────────────────────────
@@ -83,6 +90,13 @@ public class AttendanceDTO {
         // one (see AttendanceService.checkOut) rather than a blanket reason.
         // Omitted/empty when the Technician has no open jobs to explain.
         private List<JobHandoverReason> openJobReasons;
+
+        // ATT-008 — ending odometer reading, required client-side before EOD
+        // check-out completes. distanceKm = odometerEnd - odometerStart is
+        // computed in AttendanceService.mapToResponse, the same way
+        // VehicleAssignment.distanceKm already is for the Team Lead's own
+        // vehicle-assignment flow.
+        private Integer odometerEnd;
     }
 
     // ─── Job Handover Reason (SRS 5.3.1.4) ────────────────
@@ -122,6 +136,12 @@ public class AttendanceDTO {
         private Double checkOutLatitude;
         private Double checkOutLongitude;
         private String checkOutAddress;
+
+        // ATT-008 — daily mileage. distanceKm is null until both readings
+        // exist (e.g. mid-day, before EOD), same as VehicleAssignment's.
+        private Integer odometerStart;
+        private Integer odometerEnd;
+        private Integer distanceKm;
 
         // Session info
         private String status;
