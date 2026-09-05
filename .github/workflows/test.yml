@@ -20,3 +20,11 @@ jobs:
       # Testcontainers needs nothing extra to reach it.
       - name: Run tests
         run: ./mvnw test
+
+      # Surefire already writes JUnit XML to target/surefire-reports/ with no
+      # config needed -- this just reads what's already there. if: always()
+      # so a summary appears even when tests fail, which is when it matters
+      # most. ubuntu-latest ships python3 by default, no setup step needed.
+      - name: Test summary
+        if: always()
+        run: python3 .github/scripts/summarize_junit.py "target/surefire-reports/TEST-*.xml"
