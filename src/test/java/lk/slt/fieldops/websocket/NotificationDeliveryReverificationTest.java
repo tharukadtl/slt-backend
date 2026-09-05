@@ -68,6 +68,7 @@ class NotificationDeliveryReverificationTest {
     @Autowired private JobRepository           jobRepo;
     @Autowired private PaymentRepository       paymentRepo;
     @Autowired private MaterialRequestRepository materialRequestRepo;
+    @Autowired private MaterialRepository      materialRepo;
     @Autowired private NotificationRepository  notificationRepo;
     @Autowired private ObjectMapper            json;
 
@@ -81,7 +82,9 @@ class NotificationDeliveryReverificationTest {
     private final List<Job> createdJobs = new ArrayList<>();
     private final List<Payment> createdPayments = new ArrayList<>();
     private final List<MaterialRequest> createdMaterialRequests = new ArrayList<>();
+    private final List<Material> createdMaterials = new ArrayList<>();
     private final List<WorkGroup> createdWorkGroups = new ArrayList<>();
+    private final List<Opmc> createdOpmcs = new ArrayList<>();
 
     private static class RecordingHandler extends TextWebSocketHandler {
         final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
@@ -104,6 +107,40 @@ class NotificationDeliveryReverificationTest {
         u.setOpmcId(REAL_OPMC_ID);
         User saved = userRepo.save(u);
         createdUsers.add(saved);
+        return saved;
+    }
+
+    // Same established pattern as InventoryIntegrationTest/MaterialRequestIntegrationTest/
+    // MaterialRequestRejectRoleRestrictionTest/ResourceAllocationHierarchyTrackingTest/
+    // SltResourcesCollectionTest -- a real Material row, not a hardcoded materialId(1L) that
+    // only ever existed on the old shared dev database.
+    private Material newMaterial(String name, int stock) {
+        Material m = new Material();
+        m.setName(name);
+        m.setSku("SKU-" + uniq());
+        m.setUnit("m");
+        m.setUnitPrice(BigDecimal.valueOf(120));
+        m.setCurrentStock(BigDecimal.valueOf(stock));
+        m.setMinimumThreshold(BigDecimal.TEN);
+        m.setChargeType(Material.ChargeType.CHARGEABLE);
+        m.setOpmcId(REAL_OPMC_ID);
+        m.setIsActive(true);
+        Material saved = materialRepo.save(m);
+        createdMaterials.add(saved);
+        return saved;
+    }
+
+    // Creates its own OPMC fixture rather than assuming a pre-existing OPMC id=1 -- that only
+    // ever held against the old shared dev database and throws NoSuchElementException against a
+    // genuinely fresh, empty one.
+    private Opmc newOpmc() {
+        long n = uniq();
+        Opmc o = new Opmc();
+        o.setName("Reverify OPMC " + n);
+        o.setCode("RV" + n);
+        o.setAddress("123 Test Road");
+        Opmc saved = opmcRepo.save(o);
+        createdOpmcs.add(saved);
         return saved;
     }
 
@@ -143,10 +180,12 @@ class NotificationDeliveryReverificationTest {
     @AfterEach
     void cleanUp() {
         for (MaterialRequest r : createdMaterialRequests) materialRequestRepo.deleteById(r.getId());
+        for (Material m : createdMaterials) materialRepo.deleteById(m.getId());
         for (Payment p : createdPayments) paymentRepo.deleteById(p.getId());
         for (Job j : createdJobs) jobRepo.deleteById(j.getId());
         for (Fault f : createdFaults) faultRepo.deleteById(f.getId());
         for (WorkGroup w : createdWorkGroups) workGroupRepo.deleteById(w.getId());
+        for (Opmc o : createdOpmcs) opmcRepo.deleteById(o.getId());
         for (User u : createdUsers) {
             notificationRepo.deleteAll(notificationRepo.findByRecipientIdOrderByCreatedAtDesc(u.getId()));
             userRepo.deleteById(u.getId());
@@ -163,9 +202,10 @@ class NotificationDeliveryReverificationTest {
         User teamLead = newUser(User.Role.TEAM_LEAD, "rvfa_tl");
         User customer = newUser(User.Role.CLIENT, "rvfa_cust");
 
+        Opmc opmc = newOpmc();
         WorkGroup wg = new WorkGroup();
         wg.setName("Reverify WG " + uniq());
-        wg.setOpmc(opmcRepo.findById(REAL_OPMC_ID).orElseThrow());
+        wg.setOpmc(opmc);
         wg.setTeamLead(teamLead);
         wg.setIsActive(true);
         wg = workGroupRepo.save(wg);
@@ -173,7 +213,7 @@ class NotificationDeliveryReverificationTest {
 
         Fault f = new Fault();
         f.setFaultNumber("FLT-RV-" + uniq());
-        f.setOpmcId(REAL_OPMC_ID);
+        f.setOpmcId(opmc.getId());
         f.setCustomerId(customer.getId());
         f.setCustomerName(customer.getFullName());
         f.setCategory(Fault.FaultCategory.INTERNET);
@@ -300,8 +340,9 @@ class NotificationDeliveryReverificationTest {
         User admin      = newUser(User.Role.ADMIN, "rvmr_admin");
         User technician = newUser(User.Role.TECHNICIAN, "rvmr_tech");
 
+        Material material = newMaterial("Reverify Cable " + uniq(), 40);
         MaterialRequestDTO.RequestItemDTO item = MaterialRequestDTO.RequestItemDTO.builder()
-            .materialId(1L).quantity(1).build();
+            .materialId(material.getId()).quantity(1).build();
         MaterialRequestDTO.SubmitRequest submit = MaterialRequestDTO.SubmitRequest.builder()
             .items(List.of(item)).urgency("NORMAL").notes("NOTIF re-verification fixture").build();
 

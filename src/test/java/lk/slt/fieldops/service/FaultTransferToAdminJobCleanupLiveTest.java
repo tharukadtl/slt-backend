@@ -6,6 +6,7 @@ import lk.slt.fieldops.entity.Job;
 import lk.slt.fieldops.entity.Opmc;
 import lk.slt.fieldops.entity.User;
 import lk.slt.fieldops.entity.WorkGroup;
+import lk.slt.fieldops.repository.FaultHistoryRepository;
 import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.JobRepository;
 import lk.slt.fieldops.repository.OpmcRepository;
@@ -36,6 +37,7 @@ class FaultTransferToAdminJobCleanupLiveTest {
 
     @Autowired private FaultAssignmentService faultAssignmentService;
     @Autowired private FaultRepository        faultRepo;
+    @Autowired private FaultHistoryRepository faultHistoryRepo;
     @Autowired private JobRepository          jobRepo;
     @Autowired private UserRepository         userRepo;
     @Autowired private WorkGroupRepository    workGroupRepo;
@@ -158,8 +160,12 @@ class FaultTransferToAdminJobCleanupLiveTest {
                     + "actionable item in the old Team Lead's own job queue");
         } finally {
             // Real commits above — clean up explicitly, same convention this report's other
-            // live verifications use.
+            // live verifications use. transferToAdmin (FaultAssignmentService.java:816) writes a
+            // real fault_history row (a genuine @ManyToOne FK to this fault) on every call --
+            // that must go before the Fault delete below or the real, committed database
+            // rejects it with a foreign-key violation.
             jobRepo.deleteById(jobId);
+            faultHistoryRepo.deleteAll(faultHistoryRepo.findByFaultId(faultId));
             faultRepo.deleteById(faultId);
             userRepo.deleteById(customer.getId());
             userRepo.deleteById(teamLeadId);

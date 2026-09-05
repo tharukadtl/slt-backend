@@ -74,13 +74,18 @@ class AttendanceOwnershipTest {
      * {@code workgroupId} (also confirmed by reading it), the same field {@code MaterialRequestService}
      * already reads to resolve a Team Lead's own Work Group. Both sides must be linked here too.
      */
-    private WorkGroup newWorkGroup(Long opmcId, User teamLead) {
+    // Creates its own OPMC fixture (mirroring newOtherOpmc() below) rather than assuming a
+    // pre-existing OPMC id=1 -- that only ever held against the old shared dev database and
+    // throws NoSuchElementException against a genuinely fresh, empty one.
+    private WorkGroup newWorkGroup(User teamLead) {
+        Opmc opmc = newOtherOpmc();
         WorkGroup wg = new WorkGroup();
         wg.setName("ATO WG " + uniq());
-        wg.setOpmc(opmcRepo.findById(opmcId).orElseThrow());
+        wg.setOpmc(opmc);
         wg.setTeamLead(teamLead);
         wg.setIsActive(true);
         wg = workGroupRepo.save(wg);
+        teamLead.setOpmcId(opmc.getId());
         teamLead.setWorkgroup(wg);
         userRepo.save(teamLead);
         return wg;
@@ -118,8 +123,8 @@ class AttendanceOwnershipTest {
     @Test
     void teamLeadCanReadOwnWorkGroupTechniciansTodaySummary() throws Exception {
         User teamLead = newUser(User.Role.TEAM_LEAD, REAL_OPMC_ID, "WG TL");
-        WorkGroup wg  = newWorkGroup(REAL_OPMC_ID, teamLead);
-        User tech = newUser(User.Role.TECHNICIAN, REAL_OPMC_ID, "WG Tech");
+        WorkGroup wg  = newWorkGroup(teamLead);
+        User tech = newUser(User.Role.TECHNICIAN, wg.getOpmc().getId(), "WG Tech");
         tech.setWorkgroup(wg);
         userRepo.save(tech);
 
@@ -129,10 +134,10 @@ class AttendanceOwnershipTest {
     @Test
     void teamLeadCannotReadAnotherWorkGroupsTechniciansTodaySummary() throws Exception {
         User teamLead  = newUser(User.Role.TEAM_LEAD, REAL_OPMC_ID, "WG TL 2");
-        newWorkGroup(REAL_OPMC_ID, teamLead);
+        newWorkGroup(teamLead);
         User otherLead = newUser(User.Role.TEAM_LEAD, REAL_OPMC_ID, "Other WG TL");
-        WorkGroup otherWg = newWorkGroup(REAL_OPMC_ID, otherLead);
-        User foreignTech = newUser(User.Role.TECHNICIAN, REAL_OPMC_ID, "Foreign WG Tech");
+        WorkGroup otherWg = newWorkGroup(otherLead);
+        User foreignTech = newUser(User.Role.TECHNICIAN, otherWg.getOpmc().getId(), "Foreign WG Tech");
         foreignTech.setWorkgroup(otherWg);
         userRepo.save(foreignTech);
 
@@ -142,8 +147,8 @@ class AttendanceOwnershipTest {
     @Test
     void teamLeadCannotReadTechnicianWithNoWorkGroup() throws Exception {
         User teamLead = newUser(User.Role.TEAM_LEAD, REAL_OPMC_ID, "WG TL 3");
-        newWorkGroup(REAL_OPMC_ID, teamLead);
-        User unassigned = newUser(User.Role.TECHNICIAN, REAL_OPMC_ID, "Unassigned Tech");
+        WorkGroup wg = newWorkGroup(teamLead);
+        User unassigned = newUser(User.Role.TECHNICIAN, wg.getOpmc().getId(), "Unassigned Tech");
 
         assertEquals(403, getStatus(unassigned.getId(), teamLead.getId(), "TEAM_LEAD"));
     }
