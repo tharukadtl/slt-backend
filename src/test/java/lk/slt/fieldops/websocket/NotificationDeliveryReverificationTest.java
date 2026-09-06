@@ -65,6 +65,7 @@ class NotificationDeliveryReverificationTest {
     @Autowired private WorkGroupRepository     workGroupRepo;
     @Autowired private OpmcRepository          opmcRepo;
     @Autowired private FaultRepository         faultRepo;
+    @Autowired private FaultHistoryRepository  faultHistoryRepo;
     @Autowired private JobRepository           jobRepo;
     @Autowired private PaymentRepository       paymentRepo;
     @Autowired private MaterialRequestRepository materialRequestRepo;
@@ -183,6 +184,11 @@ class NotificationDeliveryReverificationTest {
         for (Material m : createdMaterials) materialRepo.deleteById(m.getId());
         for (Payment p : createdPayments) paymentRepo.deleteById(p.getId());
         for (Job j : createdJobs) jobRepo.deleteById(j.getId());
+        // Same root cause as FaultTransferToAdminJobCleanupLiveTest: assignFault
+        // (FaultAssignmentService.java:163) unconditionally writes a real fault_history row (a
+        // genuine @ManyToOne FK to the fault) -- must go before the Fault delete below or the
+        // real, committed database rejects it with a foreign-key violation.
+        for (Fault f : createdFaults) faultHistoryRepo.deleteAll(faultHistoryRepo.findByFaultId(f.getId()));
         for (Fault f : createdFaults) faultRepo.deleteById(f.getId());
         for (WorkGroup w : createdWorkGroups) workGroupRepo.deleteById(w.getId());
         for (Opmc o : createdOpmcs) opmcRepo.deleteById(o.getId());
