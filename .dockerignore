@@ -1,0 +1,13 @@
+# Dockerfile only COPYs mvnw/pom.xml/.mvn/src explicitly, so nothing here is a secret-leak risk
+# the way slt-ai-module's missing .dockerignore was -- this is purely to keep the build context
+# sent to the Docker daemon small and fast (skips .git history, target/ build output, local logs).
+.git/
+target/
+logs/
+*.log
+.env
+.env.*
+!.env.example
+.idea/
+*.iml
+.mvn/wrapper/maven-wrapper.jar

@@ -1,0 +1,174 @@
+# docker-compose.yml -- SLT Field Ops: mysql + fieldops (Spring Boot) + ai-module (Flask)
+#
+# Lives in fieldops's own repo root (not a separate, untracked "project root" -- there wasn't
+# one; this is the real, git-tracked home for it, alongside the deploy workflow that will use it).
+# Layout assumed on whatever host runs this: `slt-ai-module/` cloned as a DIRECT SIBLING of this
+# fieldops checkout (../slt-ai-module from here) -- e.g. on the deploy VM, both repos cloned side
+# by side into one deployment directory, with `docker compose` invoked from inside this one.
+#
+# Deliberately scoped to these three services only. A prior docker-compose.yml exists at
+# slt-ai-module/docker-compose.yml with a fourth service (nginx) and a bind-mounted
+# admin-portal/build directory -- left untouched rather than deleted (a real, separate reverse-
+# proxy/static-hosting concern this pass wasn't asked to build), but do not run both files
+# against the same host: their container_names and the ai-module/springboot service names would
+# collide. This file supersedes that one for the mysql+fieldops+ai-module stack.
+#
+# Credentials: every secret-shaped value below (DB_PASSWORD, MYSQL_ROOT_PASSWORD, JWT_SECRET,
+# AI_SECRET_KEY) has NO fallback default -- matching src/main/resources/application.yml's own
+# already-established, deliberate convention (`SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}`,
+# `secret: ${JWT_SECRET}`, both explicitly commented "No insecure default(s): ... required env
+# var"). A fallback like `${JWT_SECRET:-change-this-secret-in-production-256bit}` would silently
+# undermine that hardening the moment a real .env value went missing -- this fails loudly instead
+# (docker-compose warns and substitutes an empty string) rather than failing open onto a known,
+# guessable default. Real values are supplied only via a gitignored .env file sitting next to
+# this compose file -- see .env.example for every variable this file reads. Non-secret values
+# (DB_NAME, DB_USER, ports, log level, model hyperparameters) keep sensible defaults, matching
+# the same distinction application.yml itself draws.
+
+networks:
+  slt-network:
+    driver: bridge
+
+volumes:
+  # Named volume, not a bind mount or ephemeral container filesystem -- database data survives
+  # `docker-compose down` (though not `down -v`, which is the explicit, opt-in full-reset case).
+  mysql-data:
+    driver: local
+  ai-models:
+    driver: local
+  ai-logs:
+    driver: local
+  fieldops-logs:
+    driver: local
+
+services:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # MySQL 8.0 -- shared by both fieldops and ai-module over the internal network
+  # ═══════════════════════════════════════════════════════════════════════════
+  mysql:
+    image: mysql:8.0
+    container_name: slt-mysql
+    restart: unless-stopped
+    networks:
+      - slt-network
+    # Not exposed to the host -- only fieldops/ai-module (on slt-network) reach it, at mysql:3306.
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE:      ${DB_NAME:-slt_fieldops_db}
+      MYSQL_USER:          ${DB_USER:-sltuser}
+      MYSQL_PASSWORD:      ${DB_PASSWORD}
+      MYSQL_INNODB_BUFFER_POOL_SIZE: "256M"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --innodb-buffer-pool-size=256M
+      --max-connections=200
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "${DB_USER:-sltuser}", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # fieldops -- Spring Boot 3.2.3 REST API + WebSocket (lk.slt:fieldops:1.0.0, JDK 17)
+  # ═══════════════════════════════════════════════════════════════════════════
+  fieldops:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: slt-fieldops
+    restart: unless-stopped
+    networks:
+      - slt-network
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL:      jdbc:mysql://mysql:3306/${DB_NAME:-slt_fieldops_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Colombo
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-sltuser}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_SHOW_SQL: "false"
+      JWT_SECRET:                ${JWT_SECRET}
+      JWT_ACCESS_EXPIRY_MINUTES: ${JWT_ACCESS_EXPIRY_MINUTES:-30}
+      JWT_REFRESH_EXPIRY_DAYS:   ${JWT_REFRESH_EXPIRY_DAYS:-7}
+      FIREBASE_ENABLED:          ${FIREBASE_ENABLED:-false}
+      AI_MODULE_URL:             http://ai-module:5000
+      SPRING_PROFILES_ACTIVE:    ${SPRING_PROFILES:-docker}
+      LOGGING_LEVEL_ROOT:        ${SPRING_LOG_LEVEL:-INFO}
+    volumes:
+      - fieldops-logs:/app/logs
+      - ./uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # ai-module -- Flask + Prophet/K-Means/Dijkstra, served via gunicorn (Python 3.11)
+  # ═══════════════════════════════════════════════════════════════════════════
+  ai-module:
+    build:
+      context: ../slt-ai-module
+      dockerfile: Dockerfile
+    container_name: slt-ai-module
+    restart: unless-stopped
+    networks:
+      - slt-network
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      FLASK_ENV:   ${FLASK_ENV:-production}
+      FLASK_DEBUG: ${FLASK_DEBUG:-false}
+      FLASK_HOST:  0.0.0.0
+      FLASK_PORT:  5000
+      SECRET_KEY:  ${AI_SECRET_KEY}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-slt_fieldops_db}
+      DB_USER: ${DB_USER:-sltuser}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_POOL_SIZE: 5
+      DB_POOL_RECYCLE: 3600
+      SPRING_API_URL: http://fieldops:8080
+      MODEL_DIR: /app/models/saved
+      FORECAST_HORIZON_DAYS: 30
+      FORECAST_MIN_HISTORY_DAYS: 180
+      KMEANS_N_CLUSTERS: 5
+      KMEANS_RANDOM_STATE: 42
+      ROUTE_SEARCH_RADIUS_KM: 50
+      RETRAIN_INTERVAL_HOURS: 24
+      SL_LAT_MIN: 5.9
+      SL_LAT_MAX: 9.9
+      SL_LNG_MIN: 79.5
+      SL_LNG_MAX: 81.9
+      SL_CENTER_LAT: 7.8731
+      SL_CENTER_LNG: 80.7718
+      LOG_LEVEL: ${AI_LOG_LEVEL:-INFO}
+      LOG_FILE: /app/logs/ai_module.log
+    volumes:
+      - ai-models:/app/models/saved
+      - ai-logs:/app/logs
+    healthcheck:
+      # /api/ai/health -- confirmed directly against app.py's own @app.route list. The prior
+      # slt-ai-module/docker-compose.yml (and its nginx service) healthchecked
+      # /api/ai/health/ping, which does not exist anywhere in app.py -- that check could never
+      # have passed.
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/ai/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
