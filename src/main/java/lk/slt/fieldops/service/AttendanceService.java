@@ -420,7 +420,7 @@ public class AttendanceService {
 
         if (startDate != null && endDate != null) {
             records = checkInOutRepository
-                    .findByUserIdAndCreatedAtRange(
+                    .findByUserIdAndDateRange(
                             userId,
                             startDate,
                             endDate);
@@ -491,15 +491,18 @@ public class AttendanceService {
 
     /**
      * Marks a technician/Team Lead ABSENT for {@code date} by persisting a CheckInOut row
-     * (status ABSENT, checkInTime null) — a no-op if they already have any row for that date
-     * (checked in, or already marked). Called by the scheduled cutoff sweep below; also the
-     * entry point a manual/admin-triggered cutoff could call.
+     * (status ABSENT) — a no-op if they already have any row for that date (checked in, or
+     * already marked). checkInTime is left unset here, but CheckInOut's own @PrePersist
+     * stamps it to "now" regardless (the same behaviour a real check-in with no client-
+     * supplied time would get) — correct for this method's one real caller, the cutoff sweep
+     * below, which only ever marks TODAY absent, so "now" and {@code date} are the same day.
+     * Called by the scheduled cutoff sweep below; also the entry point a manual/admin-
+     * triggered cutoff could call.
      */
     @Transactional
     public void markAbsent(Long userId, LocalDate date) {
         LocalDateTime startOfDay = date.atStartOfDay();
-        LocalDateTime endOfDay = startOfDay.plusDays(1);
-        if (checkInOutRepository.existsAnyRecordForUserAndDate(userId, startOfDay, endOfDay)) {
+        if (checkInOutRepository.existsTodayCheckIn(userId, startOfDay)) {
             return;
         }
 
