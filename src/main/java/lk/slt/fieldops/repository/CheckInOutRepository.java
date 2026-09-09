@@ -117,6 +117,37 @@ public interface CheckInOutRepository
             @Param("startOfDay")
             LocalDateTime startOfDay);
 
+    // ─── Find History by User and Date Range, INCLUDING absences ─────────
+    // ATT-010 — findByUserIdAndDateRange above filters on checkInTime BETWEEN ..., which
+    // silently excludes markAbsent's ABSENT rows (null checkInTime) from any date-ranged
+    // history query. Kept as a separate method (rather than changed in place) since
+    // KpiCalculationService and ReportService also call findByUserIdAndDateRange and neither
+    // needs (or should suddenly start receiving) ABSENT rows mixed into their own results.
+    @Query("SELECT c FROM CheckInOut c "
+            + "WHERE c.user.id = :userId "
+            + "AND c.createdAt BETWEEN :startDate AND :endDate "
+            + "ORDER BY c.createdAt DESC")
+    List<CheckInOut> findByUserIdAndCreatedAtRange(
+            @Param("userId") Long userId,
+            @Param("startDate") LocalDateTime startDate,
+            @Param("endDate") LocalDateTime endDate);
+
+    // ─── Check for ANY Record on a Date (present or ABSENT) ──────────────
+    // ATT-010 — markAbsent's idempotency check. Deliberately keyed on createdAt (always set
+    // by @PrePersist) rather than checkInTime: an ABSENT row markAbsent itself writes has a
+    // null checkInTime, so a checkInTime-based existence check (existsTodayCheckIn above)
+    // would never see its own prior row and would re-mark the same absence every time the
+    // sweep ran.
+    @Query("SELECT COUNT(c) > 0 "
+            + "FROM CheckInOut c "
+            + "WHERE c.user.id = :userId "
+            + "AND c.createdAt >= :startOfDay "
+            + "AND c.createdAt < :endOfDay")
+    boolean existsAnyRecordForUserAndDate(
+            @Param("userId") Long userId,
+            @Param("startOfDay") LocalDateTime startOfDay,
+            @Param("endOfDay") LocalDateTime endOfDay);
+
     // ─── Find by Multiple Users in a Date Range ───────────
 
     @Query("SELECT c FROM CheckInOut c "

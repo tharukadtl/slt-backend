@@ -11,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,6 +33,7 @@ public class JobService {
     private final FaultHistoryRepository     faultHistoryRepo;
     private final MaterialRequestRepository  materialRequestRepo;
     private final NotificationService        notificationService;
+    private final StockTransactionRepository stockTxnRepo;
 
     public JobService(DaySessionRepository sessionRepo,
                       DaySessionMemberRepository memberRepo,
@@ -43,7 +45,8 @@ public class JobService {
                       FaultRepository faultRepo,
                       FaultHistoryRepository faultHistoryRepo,
                       MaterialRequestRepository materialRequestRepo,
-                      NotificationService notificationService) {
+                      NotificationService notificationService,
+                      StockTransactionRepository stockTxnRepo) {
         this.sessionRepo         = sessionRepo;
         this.memberRepo          = memberRepo;
         this.jobRepo             = jobRepo;
@@ -55,6 +58,7 @@ public class JobService {
         this.faultHistoryRepo    = faultHistoryRepo;
         this.materialRequestRepo = materialRequestRepo;
         this.notificationService = notificationService;
+        this.stockTxnRepo        = stockTxnRepo;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -494,6 +498,7 @@ public class JobService {
         }
 
         validateJobTransition(job.getStatus(), newStatus);
+        Job.JobStatus oldStatus = job.getStatus();
 
         if ((newStatus == Job.JobStatus.HOLD || newStatus == Job.JobStatus.REJECTED) &&
             (request.getReason() == null || request.getReason().isBlank())) {
@@ -633,6 +638,24 @@ public class JobService {
             job.setWorkNotes(request.getWorkNotes());
         }
 
+        // JOB-002/003 — every job status transition must leave an audit row, the same way
+        // FaultService.updateStatus already audits fault transitions. Kept on fault_history
+        // (there is no separate job_history table) since every Job here is tied to a Fault.
+        if (job.getFaultId() != null) {
+            User actor = userRepo.findById(userId).orElse(null);
+            final Job.JobStatus oldStatusRef = oldStatus;
+            final Job.JobStatus newStatusRef = newStatus;
+            faultRepo.findById(job.getFaultId()).ifPresent(fault ->
+                logJobRoutingHistory(fault, actor, "STATUS_CHANGED",
+                    "Job Status: " + oldStatusRef + " -> " + newStatusRef,
+                    (actor != null ? actor.getFullName() : "User #" + userId)
+                        + " updated job " + job.getJobNumber() + " status to " + newStatusRef
+                        + (request.getReason() != null && !request.getReason().isBlank()
+                            ? ". Reason: " + request.getReason() : "."),
+                    oldStatusRef != null ? oldStatusRef.name() : null,
+                    newStatusRef.name()));
+        }
+
         return jobRepo.save(job);
     }
 
@@ -716,10 +739,9 @@ public class JobService {
                 "Cannot log materials for a " + job.getStatus() + " job.");
         }
 
-        // Load real material name
-        String materialName = materialRepo.findById(request.getMaterialId())
-            .map(m -> m.getName())
-            .orElse("Material #" + request.getMaterialId());
+        Material material = materialRepo.findById(request.getMaterialId()).orElse(null);
+        String materialName = material != null
+            ? material.getName() : "Material #" + request.getMaterialId();
 
         MaterialUsage usage = new MaterialUsage();
         usage.setJobId(jobId);
@@ -731,7 +753,47 @@ public class JobService {
         usage.setJustification(request.getJustification());
         usage.setRecordedBy(userId);
 
-        return materialUsageRepo.save(usage);
+        MaterialUsage saved = materialUsageRepo.save(usage);
+
+        // JOB-010 — material usage must move stock, not just record a usage row: decrement
+        // the material's on-hand quantity, leave a stock_transactions audit row (mirroring
+        // StockManagementService.adjustStock's own STOCK_OUT/USAGE pattern), and warn the
+        // job's Team Lead once the material drops to or below its minimum threshold.
+        if (material != null && request.getQuantityUsed() != null) {
+            BigDecimal before = material.getCurrentStock() != null
+                ? material.getCurrentStock() : BigDecimal.ZERO;
+            BigDecimal after = before.subtract(request.getQuantityUsed());
+            material.setCurrentStock(after);
+            materialRepo.save(material);
+
+            StockTransaction tx = StockTransaction.builder()
+                .materialId(material.getId())
+                .materialName(material.getName())
+                .performedBy(userId)
+                .transactionType(StockTransaction.TransactionType.USAGE)
+                .quantity(request.getQuantityUsed())
+                .stockBefore(before)
+                .stockAfter(after)
+                .referenceType(StockTransaction.ReferenceType.JOB)
+                .referenceId(jobId)
+                .reason("Material used on job " + job.getJobNumber())
+                .build();
+            stockTxnRepo.save(tx);
+
+            BigDecimal minThreshold = material.getMinimumThreshold();
+            if (minThreshold != null && after.compareTo(minThreshold) <= 0) {
+                userRepo.findById(job.getTeamLeadId()).ifPresent(tl ->
+                    notificationService.notifyUser(
+                        tl.getId(), tl.getFcmToken(),
+                        Notification.NotificationType.LOW_STOCK_ALERT,
+                        "Low Stock Alert",
+                        "'" + material.getName()
+                            + "' stock is at or below minimum threshold. Please restock.",
+                        material.getId(), "MATERIAL"));
+            }
+        }
+
+        return saved;
     }
 
     // ══════════════════════════════════════════════════════════════════════════

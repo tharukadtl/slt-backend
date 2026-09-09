@@ -12,6 +12,7 @@ import lk.slt.fieldops.websocket
         .WebSocketEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation
         .Transactional;
@@ -336,12 +337,16 @@ public class AttendanceService {
                                 userId, startOfDay);
 
         if (record.isEmpty()) {
+            // ATT-010 — matches getTeamToday's own convention for a member with no check-in
+            // row today (memberStatus = "ABSENT"): a technician with no check-in row is
+            // ABSENT, not merely "hasn't gotten around to it yet". checkInTime stays null,
+            // never coerced into a phantom timestamp.
             return AttendanceDTO.TodaySummaryDTO
                     .builder()
                     .userId(userId)
                     .userName(user.getFullName())
                     .isCheckedIn(false)
-                    .currentStatus("NOT_CHECKED_IN")
+                    .currentStatus("ABSENT")
                     .date(LocalDate.now()
                             .format(DATE_FMT))
                     .build();
@@ -415,7 +420,7 @@ public class AttendanceService {
 
         if (startDate != null && endDate != null) {
             records = checkInOutRepository
-                    .findByUserIdAndDateRange(
+                    .findByUserIdAndCreatedAtRange(
                             userId,
                             startDate,
                             endDate);
@@ -429,8 +434,17 @@ public class AttendanceService {
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
 
-        // Calculate summary stats
-        int presentDays = records.size();
+        // Calculate summary stats. ATT-010 — absence is now a real persisted row (status
+        // ABSENT, written by markAbsent's cutoff sweep) rather than something this method
+        // could only ever assume never happened, so absentDays/attendanceRate are derived
+        // from the actual rows returned instead of hardcoded to 0/100%.
+        int presentDays = (int) records.stream()
+                .filter(r -> !"ABSENT".equals(r.getStatus()))
+                .count();
+        int absentDays = (int) records.stream()
+                .filter(r -> "ABSENT".equals(r.getStatus()))
+                .count();
+        int totalDays = presentDays + absentDays;
         double totalWorkHours = records.stream()
                 .filter(r ->
                         r.getCheckInTime() != null
@@ -457,12 +471,12 @@ public class AttendanceService {
                 .builder()
                 .userId(userId)
                 .userName(user.getFullName())
-                .totalDays(presentDays)
+                .totalDays(totalDays)
                 .presentDays(presentDays)
-                .absentDays(0)
+                .absentDays(absentDays)
                 .attendanceRate(
-                        presentDays > 0
-                                ? 100.0 : 0)
+                        totalDays > 0
+                                ? (presentDays * 100.0 / totalDays) : 0)
                 .avgWorkingHours(
                         Math.round(
                                 avgWorkHours * 10.0)
@@ -471,6 +485,53 @@ public class AttendanceService {
                         totalJobsCompleted)
                 .records(responses)
                 .build();
+    }
+
+    // ─── Absence Cutoff (ATT-010) ──────────────────────────
+
+    /**
+     * Marks a technician/Team Lead ABSENT for {@code date} by persisting a CheckInOut row
+     * (status ABSENT, checkInTime null) — a no-op if they already have any row for that date
+     * (checked in, or already marked). Called by the scheduled cutoff sweep below; also the
+     * entry point a manual/admin-triggered cutoff could call.
+     */
+    @Transactional
+    public void markAbsent(Long userId, LocalDate date) {
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay = startOfDay.plusDays(1);
+        if (checkInOutRepository.existsAnyRecordForUserAndDate(userId, startOfDay, endOfDay)) {
+            return;
+        }
+
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return;
+        }
+
+        CheckInOut absent = new CheckInOut();
+        absent.setUser(user);
+        absent.setCheckType("ATTENDANCE");
+        absent.setStatus("ABSENT");
+        checkInOutRepository.save(absent);
+
+        log.info("Marked userId={} ABSENT for {}", userId, date);
+    }
+
+    /**
+     * Once daily, after the working day has closed: every active TECHNICIAN/TEAM_LEAD with
+     * no check-in row for today is marked ABSENT, so a no-show becomes a real, persisted,
+     * queryable/reportable row instead of only ever a live-rendered label on the Team Lead's
+     * getTeamToday screen.
+     */
+    @Scheduled(cron = "${app.attendance.absence-cutoff-cron:0 0 20 * * *}")
+    public void runAbsenceCutoffSweep() {
+        LocalDate today = LocalDate.now();
+        List<User> staff = new ArrayList<>();
+        staff.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.TECHNICIAN));
+        staff.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.TEAM_LEAD));
+        for (User u : staff) {
+            markAbsent(u.getId(), today);
+        }
     }
 
     // ─── Team Today ───────────────────────────────────────
