@@ -763,11 +763,19 @@ public class KpiCalculationService {
                             .build());
         }
 
-        // Sort by score descending and add rank
-        leaderboard.sort((a, b) ->
-                Double.compare(
-                        b.getOverallScore(),
-                        a.getOverallScore()));
+        // Sort by score descending; a tie is broken by completed job count descending
+        // (KPI-006) rather than left to fall back on repository iteration order.
+        leaderboard.sort((a, b) -> {
+            int byScore = Double.compare(
+                    b.getOverallScore(),
+                    a.getOverallScore());
+            if (byScore != 0) {
+                return byScore;
+            }
+            return Long.compare(
+                    b.getCompletedJobs(),
+                    a.getCompletedJobs());
+        });
 
         for (int i = 0;
              i < leaderboard.size(); i++) {

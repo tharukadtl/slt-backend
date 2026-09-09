@@ -143,7 +143,7 @@ class NotificationServiceTest {
     @BeforeEach
     void setUp() {
         faultService = new FaultService(faultRepo, historyRepo, noteRepo, userRepo,
-            notificationServiceMock, exchangeService, circuitRepo, causeOfFaultRepo);
+            notificationServiceMock, exchangeService, circuitRepo, causeOfFaultRepo, webSocketEventPublisher);
     }
 
     private Fault reportedFault() {

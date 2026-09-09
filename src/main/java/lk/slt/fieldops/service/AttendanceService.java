@@ -46,6 +46,28 @@ public class AttendanceService {
             DateTimeFormatter
                     .ofPattern("hh:mm a");
 
+    // Sri Lanka bounding box (ATT-003) — same bounds LocationService.validateSriLankaCoords
+    // already enforces for live GPS pings (FAULT-018). A null coordinate is a legitimate,
+    // no-GPS-fix check-in (ATT-013) and must NOT be rejected here.
+    private static final double SL_LAT_MIN = 5.9;
+    private static final double SL_LAT_MAX = 9.9;
+    private static final double SL_LNG_MIN = 79.5;
+    private static final double SL_LNG_MAX = 81.9;
+
+    private void validateSriLankaCoordsIfPresent(Double latitude, Double longitude) {
+        if (latitude == null || longitude == null) {
+            return;
+        }
+        if (latitude < SL_LAT_MIN || latitude > SL_LAT_MAX
+                || longitude < SL_LNG_MIN || longitude > SL_LNG_MAX) {
+            throw new RuntimeException(
+                    "Check-in location (" + latitude + ", " + longitude
+                            + ") is outside Sri Lanka bounds (lat "
+                            + SL_LAT_MIN + ".." + SL_LAT_MAX + ", lng "
+                            + SL_LNG_MIN + ".." + SL_LNG_MAX + ").");
+        }
+    }
+
     // ─── BOD Check-In ─────────────────────────────────────
 
     @Transactional
@@ -64,6 +86,9 @@ public class AttendanceService {
                         new RuntimeException(
                                 "User not found: "
                                         + userId));
+
+        validateSriLankaCoordsIfPresent(
+                request.getLatitude(), request.getLongitude());
 
         // Check if already checked in today
         LocalDateTime startOfDay =

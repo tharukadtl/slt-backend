@@ -109,6 +109,15 @@ public class ReportService {
         end = req.getEndDate() != null
                 ? req.getEndDate()
                 : LocalDate.now();
+
+        // ANA-010 — an inverted range (end before start) used to be accepted silently, always
+        // rendering a confident, empty report rather than telling the caller their filter is
+        // nonsensical.
+        if (end.isBefore(start)) {
+            throw new lk.slt.fieldops.shared.exception.InvalidDateRangeException(
+                    "Invalid date range: end date (" + end + ") is before start date (" + start + ").");
+        }
+
         return new LocalDate[]{start, end};
     }
 
