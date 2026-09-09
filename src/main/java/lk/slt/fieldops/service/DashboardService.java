@@ -72,10 +72,13 @@ public class DashboardService {
 
         // Fault counts
         long totalFaults = allFaults.size();
+        // ANA-001 — Fault.FaultStatus has no OPEN constant; "open" (not yet resolved) means
+        // REPORTED/ASSIGNED/HOLD, matching ReportService's own resolveDateRange usage of the
+        // same definition.
         long openFaults = allFaults.stream()
-                .filter(f -> f.getStatus() != null
-                        && "OPEN".equals(
-                        f.getStatus().name()))
+                .filter(f -> f.getStatus() == Fault.FaultStatus.REPORTED
+                        || f.getStatus() == Fault.FaultStatus.ASSIGNED
+                        || f.getStatus() == Fault.FaultStatus.HOLD)
                 .count();
         long inProgress = allFaults.stream()
                 .filter(f -> f.getStatus() != null
@@ -105,25 +108,20 @@ public class DashboardService {
                 .count();
 
         // Payment counts
+        // ANA-001 — Payment.PaymentStatus has no PENDING/APPROVED constants; a bill awaiting
+        // admin review is DRAFT, and a billed/accepted one is FINAL.
         long pendingPayments = allPayments.stream()
-                .filter(p -> p.getStatus() != null
-                        && "PENDING".equals(
-                        p.getStatus().name()))
+                .filter(p -> p.getStatus() == Payment.PaymentStatus.DRAFT)
                 .count();
         long approvedPayments = allPayments.stream()
-                .filter(p -> p.getStatus() != null
-                        && "APPROVED".equals(
-                        p.getStatus().name()))
+                .filter(p -> p.getStatus() == Payment.PaymentStatus.FINAL)
                 .count();
 
         // Revenue this month
         double revenueThisMonth =
                 allPayments.stream()
                         .filter(p ->
-                                p.getStatus() != null
-                                        && "APPROVED"
-                                        .equals(p.getStatus()
-                                                .name())
+                                p.getStatus() == Payment.PaymentStatus.FINAL
                                         && p.getCreatedAt()
                                         != null
                                         && p.getCreatedAt()

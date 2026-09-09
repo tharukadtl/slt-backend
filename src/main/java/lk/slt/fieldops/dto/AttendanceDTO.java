@@ -151,6 +151,19 @@ public class AttendanceDTO {
         private String notes;
         private String date;
         private LocalDateTime createdAt;
+
+        // ATT-005 — EOD job summary, computed server-side from jobRepository rather than
+        // trusted off the client's own request body.
+        private JobSummary jobSummary;
+    }
+
+    // ─── Job Summary (ATT-005) ─────────────────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class JobSummary {
+        private int completedCount;
     }
 
     // ─── Today Summary ────────────────────────────────────

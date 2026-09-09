@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * SubmitPaymentRequest — Team Lead submits payment after job completion.
@@ -41,6 +42,12 @@ public class SubmitPaymentRequest {
     private String     materialJustification;
     private String     workSummary;
 
+    // Optional (issue #28): per-item material lines. When supplied, materialsFocTotal /
+    // materialsChargeableTotal above are derived server-side from these lines instead of
+    // trusted as flat totals — see PaymentService.submitPayment. Absent/empty preserves the
+    // pre-#28 flat-totals behavior unchanged.
+    private List<lk.slt.fieldops.dto.PaymentMaterialDTO.LineRequest> materials;
+
     public SubmitPaymentRequest() {}
 
     public Long       getJobId()                     { return jobId; }
@@ -54,6 +61,7 @@ public class SubmitPaymentRequest {
     public String     getJobPhotosUrls()             { return jobPhotosUrls; }
     public String     getMaterialJustification()     { return materialJustification; }
     public String     getWorkSummary()               { return workSummary; }
+    public List<lk.slt.fieldops.dto.PaymentMaterialDTO.LineRequest> getMaterials() { return materials; }
 
     public void setJobId(Long v)                           { this.jobId                   = v; }
     public void setMaterialsFocTotal(BigDecimal v)         { this.materialsFocTotal        = v; }
@@ -66,4 +74,5 @@ public class SubmitPaymentRequest {
     public void setJobPhotosUrls(String v)                 { this.jobPhotosUrls            = v; }
     public void setMaterialJustification(String v)         { this.materialJustification    = v; }
     public void setWorkSummary(String v)                   { this.workSummary              = v; }
+    public void setMaterials(List<lk.slt.fieldops.dto.PaymentMaterialDTO.LineRequest> v) { this.materials = v; }
 }

@@ -15,6 +15,7 @@ import lk.slt.fieldops.repository.FaultNoteRepository;
 import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.shared.exception.ResourceNotFoundException;
+import lk.slt.fieldops.websocket.WebSocketEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.util.HtmlUtils;
@@ -56,6 +57,7 @@ public class FaultService {
     private final ExchangeService        exchangeService;
     private final CircuitRepository      circuitRepo;
     private final CauseOfFaultRepository causeOfFaultRepo;
+    private final WebSocketEventPublisher webSocketEventPublisher;
 
     public FaultService(FaultRepository faultRepo,
                         FaultHistoryRepository historyRepo,
@@ -64,7 +66,8 @@ public class FaultService {
                         NotificationService notificationService,
                         ExchangeService exchangeService,
                         CircuitRepository circuitRepo,
-                        CauseOfFaultRepository causeOfFaultRepo) {
+                        CauseOfFaultRepository causeOfFaultRepo,
+                        WebSocketEventPublisher webSocketEventPublisher) {
         this.faultRepo   = faultRepo;
         this.historyRepo = historyRepo;
         this.noteRepo    = noteRepo;
@@ -73,6 +76,7 @@ public class FaultService {
         this.exchangeService = exchangeService;
         this.circuitRepo = circuitRepo;
         this.causeOfFaultRepo = causeOfFaultRepo;
+        this.webSocketEventPublisher = webSocketEventPublisher;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -255,6 +259,16 @@ public class FaultService {
                 "Status updated to " + newStatus);
 
         notifyCustomerOfStatusChange(saved, newStatus);
+
+        // NOTIF-004 — the Admin dashboard's "LIVE" socket never actually received a fault
+        // status event; only the customer-facing half above did. sendToRole("admin", ...) is
+        // already used elsewhere (payment submission, material requests, attendance) — this
+        // path simply never called it.
+        webSocketEventPublisher.sendToRole(
+                "admin",
+                "Fault Status Changed",
+                "Fault #" + saved.getFaultNumber() + " status changed to " + newStatus,
+                "FAULT_STATUS_CHANGED");
 
         return mapToDTO(saved);
     }

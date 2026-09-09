@@ -19,6 +19,8 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long> {
 
     List<Vehicle> findByOpmcIdAndStatus(Long opmcId, Vehicle.VehicleStatus status);
 
+    List<Vehicle> findByStatus(Vehicle.VehicleStatus status);
+
     /**
      * EXPIRY ALERT — FR-42
      * Vehicles where insurance_expiry OR revenue_license_expiry

@@ -51,4 +51,20 @@ public class RateLimitService {
 
         return w.count.incrementAndGet() <= maxRequestsPerMinute;
     }
+
+    /** SEC-006 — the real, currently-configured cap, so callers never hardcode a stale number. */
+    public int getMaxRequestsPerMinute() {
+        return maxRequestsPerMinute;
+    }
+
+    /** AUTH-017 — whole seconds remaining until {@code key}'s window rolls over, for Retry-After. */
+    public long getRetryAfterSeconds(String key) {
+        Window w = windows.get(key);
+        if (w == null) {
+            return WINDOW_MILLIS / 1000;
+        }
+        long elapsed = System.currentTimeMillis() - w.windowStart.get();
+        long remainingMillis = Math.max(0, WINDOW_MILLIS - elapsed);
+        return (remainingMillis + 999) / 1000;
+    }
 }

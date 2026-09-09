@@ -85,6 +85,24 @@ public class VehicleService {
         return vehicleRepo.findByOpmcIdAndStatus(opmcId, Vehicle.VehicleStatus.AVAILABLE);
     }
 
+    /**
+     * RES-001/RES-014 — GET /api/vehicles's own ?status= filter, previously undeclared and
+     * silently ignored (the whole fleet came back regardless of what was asked for).
+     */
+    @Transactional(readOnly = true)
+    public List<Vehicle> getByStatus(Long opmcId, String status) {
+        Vehicle.VehicleStatus statusFilter;
+        try {
+            statusFilter = Vehicle.VehicleStatus.valueOf(status.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Invalid status: " + status +
+                ". Valid: AVAILABLE, IN_USE, UNDER_REPAIR, INACTIVE");
+        }
+        return opmcId != null
+            ? vehicleRepo.findByOpmcIdAndStatus(opmcId, statusFilter)
+            : vehicleRepo.findByStatus(statusFilter);
+    }
+
     @Transactional
     public Vehicle setStatus(Long id, String status) {
         Vehicle v = findOrThrow(id);
@@ -108,11 +126,35 @@ public class VehicleService {
         if (technicianId == null) {
             v.setAssignedTechnicianId(null);
             v.setAssignedTechnicianName(null);
+            // RES-007 — a vehicle handed back must leave IN_USE and re-enter the pool
+            // ?status=AVAILABLE and every other "who's free" query relies on.
+            v.setStatus(Vehicle.VehicleStatus.AVAILABLE);
         } else {
+            // RES-007 — refuse a double-issue rather than silently reassigning out from
+            // under whoever already holds it.
+            if (v.getAssignedTechnicianId() != null) {
+                throw new RuntimeException(
+                    "Vehicle '" + v.getRegistrationNumber() + "' is already assigned to "
+                        + v.getAssignedTechnicianName() + ".");
+            }
             User technician = userRepo.findById(technicianId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found: " + technicianId));
             v.setAssignedTechnicianId(technician.getId());
             v.setAssignedTechnicianName(technician.getFullName());
+            // RES-006 — a vehicle handed to a technician must leave the AVAILABLE pool so
+            // it can't be handed to a second person via a status-blind path.
+            v.setStatus(Vehicle.VehicleStatus.IN_USE);
+
+            // RES-006/014 — custody/mileage audit trail. Reuses the same vehicle_assignments
+            // table the daily Team-Lead BOD/EOD rotation writes to (below) — this ad-hoc admin
+            // assignment has no day-session to key against, so it's recorded keyed by the
+            // technician instead of a Team Lead.
+            VehicleAssignment assignment = new VehicleAssignment();
+            assignment.setVehicleId(vehicleId);
+            assignment.setTeamLeadId(technician.getId());
+            assignment.setTeamLeadName(technician.getFullName());
+            assignment.setBodOdometer(v.getCurrentOdometer());
+            assignmentRepo.save(assignment);
         }
         return vehicleRepo.save(v);
     }
@@ -144,6 +186,16 @@ public class VehicleService {
             throw new RuntimeException(
                 "Vehicle '" + vehicle.getRegistrationNumber() +
                 "' is not available (status: " + vehicle.getStatus() + ").");
+        }
+
+        // RES-007 — a vehicle already handed to another Team Lead today must not be
+        // handed to a second one as well, even though its status stays AVAILABLE (this
+        // daily rotation tracks custody by date/team-lead in vehicle_assignments, separately
+        // from vehicles.status, which assignTechnician's ad-hoc admin flow owns).
+        if (assignmentRepo.existsByVehicleIdAndAssignmentDate(vehicleId, today)) {
+            throw new RuntimeException(
+                "Vehicle '" + vehicle.getRegistrationNumber() +
+                "' is already assigned to another Team Lead today.");
         }
 
         VehicleAssignment assignment = new VehicleAssignment();
@@ -208,6 +260,19 @@ public class VehicleService {
     @Transactional(readOnly = true)
     public List<VehicleAssignment> getAssignmentHistory(Long vehicleId) {
         return assignmentRepo.findByVehicleIdOrderByAssignmentDateDesc(vehicleId);
+    }
+
+    /**
+     * RES-008 — the day's mileage for a vehicle, from that day's vehicle_assignments row
+     * (distance_km, already computed by closeAssignment). Null when no assignment exists for
+     * that date, or the day hasn't been closed (EOD) yet — not a false "0 km".
+     */
+    @Transactional(readOnly = true)
+    public Integer getDailyMileage(Long vehicleId, LocalDate date) {
+        findOrThrow(vehicleId);
+        return assignmentRepo.findByVehicleIdAndAssignmentDate(vehicleId, date)
+            .map(VehicleAssignment::getDistanceKm)
+            .orElse(null);
     }
 
     // ══════════════════════════════════════════════════════════════════════════

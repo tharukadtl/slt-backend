@@ -12,6 +12,7 @@ import lk.slt.fieldops.websocket
         .WebSocketEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation
         .Transactional;
@@ -46,6 +47,28 @@ public class AttendanceService {
             DateTimeFormatter
                     .ofPattern("hh:mm a");
 
+    // Sri Lanka bounding box (ATT-003) — same bounds LocationService.validateSriLankaCoords
+    // already enforces for live GPS pings (FAULT-018). A null coordinate is a legitimate,
+    // no-GPS-fix check-in (ATT-013) and must NOT be rejected here.
+    private static final double SL_LAT_MIN = 5.9;
+    private static final double SL_LAT_MAX = 9.9;
+    private static final double SL_LNG_MIN = 79.5;
+    private static final double SL_LNG_MAX = 81.9;
+
+    private void validateSriLankaCoordsIfPresent(Double latitude, Double longitude) {
+        if (latitude == null || longitude == null) {
+            return;
+        }
+        if (latitude < SL_LAT_MIN || latitude > SL_LAT_MAX
+                || longitude < SL_LNG_MIN || longitude > SL_LNG_MAX) {
+            throw new RuntimeException(
+                    "Check-in location (" + latitude + ", " + longitude
+                            + ") is outside Sri Lanka bounds (lat "
+                            + SL_LAT_MIN + ".." + SL_LAT_MAX + ", lng "
+                            + SL_LNG_MIN + ".." + SL_LNG_MAX + ").");
+        }
+    }
+
     // ─── BOD Check-In ─────────────────────────────────────
 
     @Transactional
@@ -64,6 +87,9 @@ public class AttendanceService {
                         new RuntimeException(
                                 "User not found: "
                                         + userId));
+
+        validateSriLankaCoordsIfPresent(
+                request.getLatitude(), request.getLongitude());
 
         // Check if already checked in today
         LocalDateTime startOfDay =
@@ -208,10 +234,14 @@ public class AttendanceService {
         checkIn.setStatus("CHECKED_OUT");
         checkIn.setOdometerEnd(request.getOdometerEnd());
 
-        if (request.getJobsCompleted() != null) {
-            checkIn.setJobsCompleted(
-                    request.getJobsCompleted());
-        }
+        // ATT-005 — count today's actual completions via jobRepository (already injected for
+        // open-job handover, above) instead of trusting request.getJobsCompleted(), which let
+        // the client report whatever productivity figure it liked.
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime todayEnd = todayStart.plusDays(1);
+        int completedToday = (int) jobRepository.countByTechnicianIdAndStatusAndCompletedAtBetween(
+                userId, lk.slt.fieldops.entity.Job.JobStatus.COMPLETED, todayStart, todayEnd);
+        checkIn.setJobsCompleted(completedToday);
 
         if (request.getNotes() != null) {
             String existing =
@@ -336,12 +366,16 @@ public class AttendanceService {
                                 userId, startOfDay);
 
         if (record.isEmpty()) {
+            // ATT-010 — matches getTeamToday's own convention for a member with no check-in
+            // row today (memberStatus = "ABSENT"): a technician with no check-in row is
+            // ABSENT, not merely "hasn't gotten around to it yet". checkInTime stays null,
+            // never coerced into a phantom timestamp.
             return AttendanceDTO.TodaySummaryDTO
                     .builder()
                     .userId(userId)
                     .userName(user.getFullName())
                     .isCheckedIn(false)
-                    .currentStatus("NOT_CHECKED_IN")
+                    .currentStatus("ABSENT")
                     .date(LocalDate.now()
                             .format(DATE_FMT))
                     .build();
@@ -429,8 +463,17 @@ public class AttendanceService {
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
 
-        // Calculate summary stats
-        int presentDays = records.size();
+        // Calculate summary stats. ATT-010 — absence is now a real persisted row (status
+        // ABSENT, written by markAbsent's cutoff sweep) rather than something this method
+        // could only ever assume never happened, so absentDays/attendanceRate are derived
+        // from the actual rows returned instead of hardcoded to 0/100%.
+        int presentDays = (int) records.stream()
+                .filter(r -> !"ABSENT".equals(r.getStatus()))
+                .count();
+        int absentDays = (int) records.stream()
+                .filter(r -> "ABSENT".equals(r.getStatus()))
+                .count();
+        int totalDays = presentDays + absentDays;
         double totalWorkHours = records.stream()
                 .filter(r ->
                         r.getCheckInTime() != null
@@ -457,12 +500,12 @@ public class AttendanceService {
                 .builder()
                 .userId(userId)
                 .userName(user.getFullName())
-                .totalDays(presentDays)
+                .totalDays(totalDays)
                 .presentDays(presentDays)
-                .absentDays(0)
+                .absentDays(absentDays)
                 .attendanceRate(
-                        presentDays > 0
-                                ? 100.0 : 0)
+                        totalDays > 0
+                                ? (presentDays * 100.0 / totalDays) : 0)
                 .avgWorkingHours(
                         Math.round(
                                 avgWorkHours * 10.0)
@@ -471,6 +514,56 @@ public class AttendanceService {
                         totalJobsCompleted)
                 .records(responses)
                 .build();
+    }
+
+    // ─── Absence Cutoff (ATT-010) ──────────────────────────
+
+    /**
+     * Marks a technician/Team Lead ABSENT for {@code date} by persisting a CheckInOut row
+     * (status ABSENT) — a no-op if they already have any row for that date (checked in, or
+     * already marked). checkInTime is left unset here, but CheckInOut's own @PrePersist
+     * stamps it to "now" regardless (the same behaviour a real check-in with no client-
+     * supplied time would get) — correct for this method's one real caller, the cutoff sweep
+     * below, which only ever marks TODAY absent, so "now" and {@code date} are the same day.
+     * Called by the scheduled cutoff sweep below; also the entry point a manual/admin-
+     * triggered cutoff could call.
+     */
+    @Transactional
+    public void markAbsent(Long userId, LocalDate date) {
+        LocalDateTime startOfDay = date.atStartOfDay();
+        if (checkInOutRepository.existsTodayCheckIn(userId, startOfDay)) {
+            return;
+        }
+
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            return;
+        }
+
+        CheckInOut absent = new CheckInOut();
+        absent.setUser(user);
+        absent.setCheckType("ATTENDANCE");
+        absent.setStatus("ABSENT");
+        checkInOutRepository.save(absent);
+
+        log.info("Marked userId={} ABSENT for {}", userId, date);
+    }
+
+    /**
+     * Once daily, after the working day has closed: every active TECHNICIAN/TEAM_LEAD with
+     * no check-in row for today is marked ABSENT, so a no-show becomes a real, persisted,
+     * queryable/reportable row instead of only ever a live-rendered label on the Team Lead's
+     * getTeamToday screen.
+     */
+    @Scheduled(cron = "${app.attendance.absence-cutoff-cron:0 0 20 * * *}")
+    public void runAbsenceCutoffSweep() {
+        LocalDate today = LocalDate.now();
+        List<User> staff = new ArrayList<>();
+        staff.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.TECHNICIAN));
+        staff.addAll(userRepository.findByRoleAndIsActiveTrue(User.Role.TEAM_LEAD));
+        for (User u : staff) {
+            markAbsent(u.getId(), today);
+        }
     }
 
     // ─── Team Today ───────────────────────────────────────
@@ -732,6 +825,10 @@ public class AttendanceService {
                         .format(DATE_FMT)
                         : null)
                 .createdAt(record.getCheckInTime())
+                .jobSummary(AttendanceDTO.JobSummary.builder()
+                        .completedCount(record.getJobsCompleted() != null
+                                ? record.getJobsCompleted() : 0)
+                        .build())
                 .build();
     }
 

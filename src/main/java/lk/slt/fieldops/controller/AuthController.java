@@ -33,10 +33,11 @@ public class AuthController {
 
     @PostMapping("/otp/send")
     public ResponseEntity<Map<String, Object>> sendOtp(@Valid @RequestBody OtpLoginRequest request) {
-        authService.sendOtp(request.getPhoneNumber());
+        Long otpId = authService.sendOtp(request.getPhoneNumber());
         return ResponseEntity.ok(Map.of(
             "message", "A 6-digit OTP has been sent to " + request.getPhoneNumber() + ".",
-            "expiresIn", 5
+            "expiresIn", 5,
+            "otpId", otpId
         ));
     }
 
