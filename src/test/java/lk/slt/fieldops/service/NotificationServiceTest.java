@@ -26,6 +26,7 @@ import lk.slt.fieldops.repository.MaterialRepository;
 import lk.slt.fieldops.repository.MaterialRequestRepository;
 import lk.slt.fieldops.repository.NotificationRepository;
 import lk.slt.fieldops.repository.PaymentApprovalRepository;
+import lk.slt.fieldops.repository.PaymentMaterialRepository;
 import lk.slt.fieldops.repository.PaymentRepository;
 import lk.slt.fieldops.repository.StockTransactionRepository;
 import lk.slt.fieldops.repository.UserRepository;
@@ -133,6 +134,7 @@ class NotificationServiceTest {
     @Mock private PaymentRepository         paymentRepo;
     @Mock private PaymentApprovalRepository approvalRepo;
     @Mock private JobRepository             jobRepo;
+    @Mock private PaymentMaterialRepository paymentMaterialRepo;
 
     private FaultService faultService;
 
@@ -584,7 +586,7 @@ class NotificationServiceTest {
         NotificationService realNotifier = new NotificationService(notificationRepo);
         PaymentService paymentService = new PaymentService(
             paymentRepo, approvalRepo, jobRepo, faultRepo, webSocketEventPublisher,
-            userRepo, realNotifier);
+            userRepo, realNotifier, paymentMaterialRepo, materialRepo, new FocDeterminator());
 
         Payment payment = new Payment();
         payment.setId(NP_PAYMENT_ID);

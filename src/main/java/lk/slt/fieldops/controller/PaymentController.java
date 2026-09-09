@@ -3,10 +3,13 @@ package lk.slt.fieldops.controller;
 import jakarta.validation.Valid;
 import lk.slt.fieldops.dto.AmendBillRequest;
 import lk.slt.fieldops.dto.ClientBillDTO;
+import lk.slt.fieldops.dto.PaymentDetailResponse;
+import lk.slt.fieldops.dto.PaymentMaterialDTO;
 import lk.slt.fieldops.dto.ReviewPaymentRequest;
 import lk.slt.fieldops.dto.SubmitPaymentRequest;
 import lk.slt.fieldops.entity.Payment;
 import lk.slt.fieldops.entity.PaymentApproval;
+import lk.slt.fieldops.entity.PaymentMaterial;
 import lk.slt.fieldops.entity.User;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.service.PaymentService;
@@ -34,6 +37,8 @@ import java.util.stream.Collectors;
  * PATCH  /api/payments/{id}/review      Admin: approve or reject
  * PATCH  /api/payments/{id}/amend       Admin: amend a disputed bill and resend
  * GET    /api/payments/{id}/approvals   Audit trail
+ * GET    /api/payments/{id}/details     Payment + per-material lines (issue #28)
+ * PATCH  /api/payments/materials/{id}/override-foc   Re-classify a material line (issue #28)
  */
 @RestController
 @RequestMapping("/api/payments")
@@ -164,5 +169,29 @@ public class PaymentController {
                                                                 @AuthenticationPrincipal Long callerId) {
         opmcGuard.assertSameOpmc(paymentService.getById(id).getOpmcId(), callerId);
         return ResponseEntity.ok(paymentService.getApprovalHistory(id));
+    }
+
+    /** Issue #28 / PAY-014 — the payment plus its per-material lines (name JOINed in from Material). */
+    @GetMapping("/{id}/details")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
+    public ResponseEntity<PaymentDetailResponse> getDetails(@PathVariable Long id,
+                                                              @AuthenticationPrincipal Long callerId) {
+        PaymentDetailResponse details = paymentService.getPaymentWithDetails(id);
+        opmcGuard.assertSameOpmc(details.getPayment().getOpmcId(), callerId);
+        return ResponseEntity.ok(details);
+    }
+
+    /**
+     * Issue #28 / PAY-012 — re-classify a material line's FOC/chargeable status. Admin-gated,
+     * mirroring the amend/review billing decisions, and requires a justification (validated in
+     * PaymentService.overrideFoc; @NotBlank here fails fast on an empty payload).
+     */
+    @PatchMapping("/materials/{paymentMaterialId}/override-foc")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<PaymentMaterial> overrideFoc(
+            @PathVariable Long paymentMaterialId,
+            @Valid @RequestBody PaymentMaterialDTO.OverrideFocRequest request) {
+        return ResponseEntity.ok(
+            paymentService.overrideFoc(paymentMaterialId, request.getJustification()));
     }
 }
