@@ -13,6 +13,9 @@ import lk.slt.fieldops.service.FaultService;
 import lk.slt.fieldops.service.LocationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -40,25 +43,42 @@ public class FaultController {
     // database query (FaultRepository.findByOptionalStatusAndCategory).
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<FaultDTO>> getAll(
+    public ResponseEntity<Page<FaultDTO>> getAll(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
             @AuthenticationPrincipal Long userId) {
-        log.info("GET /api/faults status={} category={}", status, category);
+        log.info("GET /api/faults status={} category={} page={} size={}", status, category, page, size);
         boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
             .getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+
+        List<FaultDTO> all;
         if (isSuperAdmin) {
-            return ResponseEntity.ok(faultService.getAllFaults(status, category));
+            all = faultService.getAllFaults(status, category);
+        } else {
+            // RES-023 — OPMC Admin sees only their own OPMC's faults. opmcId is
+            // derived from the caller's own user record, never a client-supplied
+            // parameter, so it can't be overridden the way a bare query param could.
+            Long opmcId = userRepo.findById(userId).map(User::getOpmcId).orElse(null);
+            all = opmcId == null ? List.of() : faultService.getAllFaultsForOpmc(opmcId, status, category);
         }
-        // RES-023 — OPMC Admin sees only their own OPMC's faults. opmcId is
-        // derived from the caller's own user record, never a client-supplied
-        // parameter, so it can't be overridden the way a bare query param could.
-        Long opmcId = userRepo.findById(userId).map(User::getOpmcId).orElse(null);
-        if (opmcId == null) {
-            return ResponseEntity.ok(List.of());
-        }
-        return ResponseEntity.ok(faultService.getAllFaultsForOpmc(opmcId, status, category));
+        return ResponseEntity.ok(paginate(all, page, size));
+    }
+
+    // API-004 — page/size were previously declared nowhere on this endpoint and silently
+    // discarded by Spring as unbound, so every caller always received the entire table.
+    // Slices the already-filtered list rather than pushing paging into the repository layer
+    // (getAllFaults/getAllFaultsForOpmc are also called by other, non-paginated callers) —
+    // the response is now a genuine Page envelope with a real totalElements/content, even
+    // though the underlying query itself isn't yet page-bounded at the DB level.
+    private Page<FaultDTO> paginate(List<FaultDTO> all, int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.max(size, 1);
+        int from = Math.min(safePage * safeSize, all.size());
+        int to = Math.min(from + safeSize, all.size());
+        return new PageImpl<>(all.subList(from, to), PageRequest.of(safePage, safeSize), all.size());
     }
 
     // ─── GET /api/faults/my — Team Lead: faults assigned to me ───────────────

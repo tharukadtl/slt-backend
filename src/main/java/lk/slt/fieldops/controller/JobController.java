@@ -228,6 +228,28 @@ public class JobController {
         return ResponseEntity.ok(jobService.getMaterialsForJob(id));
     }
 
+    // ── JOB-014: Job Notes ─────────────────────────────────────────────────────
+    @PostMapping("/{id}/notes")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<JobNoteDTO.NoteResponse> addNote(
+            @PathVariable Long id,
+            @Valid @RequestBody JobNoteDTO.AddNoteRequest request,
+            @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(jobService.addJobNote(id, request, userId));
+    }
+
+    @GetMapping("/{id}/notes")
+    @PreAuthorize("hasAnyRole('CLIENT','TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<JobNoteDTO.NoteResponse>> getNotes(@PathVariable Long id) {
+        boolean isStaff = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().contains("ADMIN")
+                        || a.getAuthority().contains("TECHNICIAN")
+                        || a.getAuthority().contains("TEAM_LEAD"));
+        return ResponseEntity.ok(jobService.getJobNotes(id, isStaff));
+    }
+
     // ── 13. Check if Technician is active today ───────────────────────────────
     /**
      * GET /api/jobs/technician/{id}/active
