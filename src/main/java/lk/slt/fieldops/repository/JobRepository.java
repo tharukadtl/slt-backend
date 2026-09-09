@@ -29,6 +29,10 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     List<Job> findByTechnicianIdInAndCreatedAtBetween(
             List<Long> technicianIds, LocalDateTime start, LocalDateTime end);
 
+    /** ATT-005 — EOD job summary: how many jobs this technician actually completed today. */
+    long countByTechnicianIdAndStatusAndCompletedAtBetween(
+            Long technicianId, Job.JobStatus status, LocalDateTime start, LocalDateTime end);
+
     List<Job> findBySessionId(Long sessionId);
 
     /** Jobs still open in a session — for EOD auto-return */

@@ -208,10 +208,14 @@ public class AttendanceService {
         checkIn.setStatus("CHECKED_OUT");
         checkIn.setOdometerEnd(request.getOdometerEnd());
 
-        if (request.getJobsCompleted() != null) {
-            checkIn.setJobsCompleted(
-                    request.getJobsCompleted());
-        }
+        // ATT-005 — count today's actual completions via jobRepository (already injected for
+        // open-job handover, above) instead of trusting request.getJobsCompleted(), which let
+        // the client report whatever productivity figure it liked.
+        LocalDateTime todayStart = LocalDate.now().atStartOfDay();
+        LocalDateTime todayEnd = todayStart.plusDays(1);
+        int completedToday = (int) jobRepository.countByTechnicianIdAndStatusAndCompletedAtBetween(
+                userId, lk.slt.fieldops.entity.Job.JobStatus.COMPLETED, todayStart, todayEnd);
+        checkIn.setJobsCompleted(completedToday);
 
         if (request.getNotes() != null) {
             String existing =
@@ -732,6 +736,10 @@ public class AttendanceService {
                         .format(DATE_FMT)
                         : null)
                 .createdAt(record.getCheckInTime())
+                .jobSummary(AttendanceDTO.JobSummary.builder()
+                        .completedCount(record.getJobsCompleted() != null
+                                ? record.getJobsCompleted() : 0)
+                        .build())
                 .build();
     }
 

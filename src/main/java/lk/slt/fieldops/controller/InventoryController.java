@@ -161,9 +161,11 @@ public class InventoryController {
     @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<StockDTO.StockLevelDTO>> searchMaterials(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) Long categoryId) {
-        log.info("GET /api/inventory/materials/search search={}, categoryId={}", search, categoryId);
-        return ResponseEntity.ok(stockManagementService.searchStockLevels(search, categoryId));
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Boolean isFoc) {
+        log.info("GET /api/inventory/materials/search search={}, categoryId={}, isFoc={}",
+            search, categoryId, isFoc);
+        return ResponseEntity.ok(stockManagementService.searchStockLevels(search, categoryId, isFoc));
     }
 
     // ── Material CRUD ─────────────────────────────────────────────────────────
