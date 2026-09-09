@@ -576,6 +576,13 @@ public class KpiCalculationService {
                                 "Admin not found: "
                                         + adminId));
 
+        // KPI-003/004 — period_year, target_year, target_month, min_jobs_per_day,
+        // target_sla_compliance and target_customer_rating are all NOT NULL with no default
+        // under STRICT_TRANS_TABLES. The last five belong to a separate, not-yet-built
+        // branch-level monthly target sub-feature (see the entity's own field comments) that
+        // this individual technician target has no value for — defaulted rather than left
+        // null, since the schema demands a value from every row regardless of target type.
+        LocalDate today = LocalDate.now();
         KpiTarget target = KpiTarget.builder()
                 .user(technician)
                 .assignedBy(admin)
@@ -587,11 +594,17 @@ public class KpiCalculationService {
                 .period(request.getPeriod())
                 .category(request.getCategory())
                 .dueDate(request.getDueDate())
-                .startDate(LocalDate.now())
+                .startDate(today)
                 .status(KpiDTO.STATUS_ON_TRACK)
                 .isGroupTarget(
                         request.isGroupTarget())
                 .isActive(true)
+                .periodYear(today.getYear())
+                .targetYear(today.getYear())
+                .targetMonth(today.getMonthValue())
+                .minJobsPerDay(0)
+                .targetSlaCompliance(java.math.BigDecimal.ZERO)
+                .targetCustomerRating(java.math.BigDecimal.ZERO)
                 .build();
 
         KpiTarget saved =
@@ -981,18 +994,23 @@ public class KpiCalculationService {
         LocalDate end = LocalDate.now();
         LocalDate start;
 
+        // KPI-011 — an unrecognised (or misspelt) period used to silently fall back to the
+        // MONTHLY window, returning a confident 200 with data the caller never asked for and
+        // no indication the filter was ignored.
         switch (period.toUpperCase()) {
-            case "DAILY":
+            case KpiDTO.PERIOD_DAILY:
                 start = end;
                 break;
-            case "WEEKLY":
+            case KpiDTO.PERIOD_WEEKLY:
                 start = end.minusDays(6);
                 break;
-            case "MONTHLY":
+            case KpiDTO.PERIOD_MONTHLY:
                 start = end.withDayOfMonth(1);
                 break;
             default:
-                start = end.withDayOfMonth(1);
+                throw new RuntimeException("Invalid period: " + period + ". Valid: "
+                        + KpiDTO.PERIOD_DAILY + ", " + KpiDTO.PERIOD_WEEKLY + ", "
+                        + KpiDTO.PERIOD_MONTHLY);
         }
 
         return new LocalDate[]{start, end};
