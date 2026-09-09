@@ -43,11 +43,11 @@ public class FaultController {
     // database query (FaultRepository.findByOptionalStatusAndCategory).
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<Page<FaultDTO>> getAll(
+    public ResponseEntity<?> getAll(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String category,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
             @AuthenticationPrincipal Long userId) {
         log.info("GET /api/faults status={} category={} page={} size={}", status, category, page, size);
         boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
@@ -64,11 +64,18 @@ public class FaultController {
             Long opmcId = userRepo.findById(userId).map(User::getOpmcId).orElse(null);
             all = opmcId == null ? List.of() : faultService.getAllFaultsForOpmc(opmcId, status, category);
         }
-        return ResponseEntity.ok(paginate(all, page, size));
+
+        // API-004 — page/size are opt-in: a caller that supplies neither gets the same bare
+        // array every existing caller already relies on (FaultSecurityTest, SqlInjectionSecurityTest,
+        // SltFaultsCollectionTest#filterByCategoryAndStatus all assert this shape); a caller that
+        // supplies either gets a real Page envelope (content + totalElements) instead of that
+        // param being silently discarded as unbound and the full table returned regardless.
+        if (page == null && size == null) {
+            return ResponseEntity.ok(all);
+        }
+        return ResponseEntity.ok(paginate(all, page != null ? page : 0, size != null ? size : 20));
     }
 
-    // API-004 — page/size were previously declared nowhere on this endpoint and silently
-    // discarded by Spring as unbound, so every caller always received the entire table.
     // Slices the already-filtered list rather than pushing paging into the repository layer
     // (getAllFaults/getAllFaultsForOpmc are also called by other, non-paginated callers) —
     // the response is now a genuine Page envelope with a real totalElements/content, even
