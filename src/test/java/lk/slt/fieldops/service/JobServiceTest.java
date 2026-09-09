@@ -71,6 +71,8 @@ class JobServiceTest {
     @Mock private NotificationService        notificationService;
     @Mock private VehicleService             vehicleService;
     @Mock private StockTransactionRepository stockTxnRepo;
+    @Mock private JobPhotoRepository         jobPhotoRepo;
+    @Mock private JobNoteRepository          jobNoteRepo;
 
     private JobService jobService;
 
@@ -82,7 +84,8 @@ class JobServiceTest {
     void setUp() {
         jobService = new JobService(sessionRepo, memberRepo, jobRepo, checkInOutRepo,
             materialUsageRepo, userRepo, materialRepo, faultRepo, faultHistoryRepo,
-            materialRequestRepo, notificationService, vehicleService, stockTxnRepo);
+            materialRequestRepo, notificationService, vehicleService, stockTxnRepo,
+            jobPhotoRepo, jobNoteRepo);
 
         User technician = new User();
         technician.setId(TECH_ID);

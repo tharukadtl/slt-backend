@@ -35,6 +35,8 @@ public class JobService {
     private final NotificationService        notificationService;
     private final VehicleService             vehicleService;
     private final StockTransactionRepository stockTxnRepo;
+    private final JobPhotoRepository         jobPhotoRepo;
+    private final JobNoteRepository          jobNoteRepo;
 
     public JobService(DaySessionRepository sessionRepo,
                       DaySessionMemberRepository memberRepo,
@@ -48,7 +50,9 @@ public class JobService {
                       MaterialRequestRepository materialRequestRepo,
                       NotificationService notificationService,
                       VehicleService vehicleService,
-                      StockTransactionRepository stockTxnRepo) {
+                      StockTransactionRepository stockTxnRepo,
+                      JobPhotoRepository jobPhotoRepo,
+                      JobNoteRepository jobNoteRepo) {
         this.sessionRepo         = sessionRepo;
         this.memberRepo          = memberRepo;
         this.jobRepo             = jobRepo;
@@ -62,6 +66,8 @@ public class JobService {
         this.notificationService = notificationService;
         this.vehicleService      = vehicleService;
         this.stockTxnRepo        = stockTxnRepo;
+        this.jobPhotoRepo        = jobPhotoRepo;
+        this.jobNoteRepo         = jobNoteRepo;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -603,7 +609,7 @@ public class JobService {
             job.setCompletedAt(LocalDateTime.now());
             job.setCauseOfFault(request.getCauseOfFault());
             job.setCompletionRemarks(request.getCompletionRemarks());
-            job.setCompletionPhotoUrls(request.getCompletionPhotoUrls());
+            claimCompletionPhotos(job, request.getCompletionPhotoUrls());
 
             // SRS 5.3.1.3 (FR-9) — client unavailable or declined to sign. Does not block
             // completion at this level (confirmed: no signature is required to reach
@@ -724,6 +730,84 @@ public class JobService {
             job.setLinkedMaterialRequestId(mr.getId());
             job.setLinkedMaterialRequestNumber(mr.getRequestNumber());
         }
+    }
+
+    /**
+     * JOB-006/015 — completionPhotoUrls arrives as the same comma-separated list of URLs
+     * /api/uploads/photos returned; each URL was persisted there as an unclaimed JobPhoto
+     * (jobId null, carrying whatever photo_type was uploaded with it). Claims each one for
+     * this job rather than re-splitting the string into a fresh, untyped row every time — a
+     * URL with no matching unclaimed record (e.g. submitted twice, or from some other source)
+     * falls back to a plain AFTER row so completion never silently drops a photo.
+     * completion_photo_urls itself is kept as a single "primary photo" reference (the first
+     * URL) for backward compatibility, not the full joined list.
+     */
+    private void claimCompletionPhotos(Job job, String completionPhotoUrls) {
+        if (completionPhotoUrls == null || completionPhotoUrls.isBlank()) {
+            return;
+        }
+        String[] urls = completionPhotoUrls.split(",");
+        boolean first = true;
+        for (String rawUrl : urls) {
+            String url = rawUrl.trim();
+            if (url.isEmpty()) continue;
+            if (first) {
+                job.setCompletionPhotoUrls(url);
+                first = false;
+            }
+            JobPhoto photo = jobPhotoRepo.findFirstByUrlAndJobIdIsNull(url)
+                    .orElseGet(() -> JobPhoto.builder()
+                            .url(url)
+                            .photoType(JobPhoto.PhotoType.AFTER)
+                            .build());
+            photo.setJobId(job.getId());
+            jobPhotoRepo.save(photo);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 5c. JOB NOTES (JOB-014) — internal/external notes on a job, mirroring
+    // FaultAssignmentService's fault-note pattern
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Transactional
+    public JobNoteDTO.NoteResponse addJobNote(Long jobId, JobNoteDTO.AddNoteRequest request, Long userId) {
+        findJobOrThrow(jobId);
+        User author = userRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+
+        JobNote note = JobNote.builder()
+                .jobId(jobId)
+                .addedBy(author.getId())
+                .addedByName(author.getFullName())
+                .addedByRole(author.getRole() != null ? author.getRole().name() : null)
+                .content(request.getContent())
+                .isInternal(request.isInternal())
+                .build();
+
+        return mapNoteToResponse(jobNoteRepo.save(note));
+    }
+
+    @Transactional(readOnly = true)
+    public List<JobNoteDTO.NoteResponse> getJobNotes(Long jobId, boolean includeInternal) {
+        findJobOrThrow(jobId);
+        List<JobNote> notes = includeInternal
+                ? jobNoteRepo.findByJobId(jobId)
+                : jobNoteRepo.findPublicByJobId(jobId);
+        return notes.stream().map(this::mapNoteToResponse).collect(Collectors.toList());
+    }
+
+    private JobNoteDTO.NoteResponse mapNoteToResponse(JobNote note) {
+        return JobNoteDTO.NoteResponse.builder()
+                .id(note.getId())
+                .jobId(note.getJobId())
+                .content(note.getContent())
+                .isInternal(note.getIsInternal() != null && note.getIsInternal())
+                .authorId(note.getAddedBy())
+                .authorName(note.getAddedByName())
+                .authorRole(note.getAddedByRole())
+                .createdAt(note.getCreatedAt())
+                .build();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
