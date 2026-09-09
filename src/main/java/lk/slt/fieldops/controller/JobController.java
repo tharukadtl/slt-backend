@@ -37,6 +37,12 @@ import java.util.Map;
  * POST  /api/jobs/{id}/materials         Technician logs material used
  * GET   /api/jobs/{id}/materials         Get all materials for a job
  *
+ * ── WORK TIMER (JOB-009) ──────────────────────────────────────────────────────
+ * POST  /api/jobs/{id}/timer/start       Technician starts the work timer
+ * POST  /api/jobs/{id}/timer/pause       Technician pauses the work timer
+ * POST  /api/jobs/{id}/timer/resume      Technician resumes the work timer
+ * GET   /api/jobs/{id}/timer             List this job's timer intervals
+ *
  * ── UTILITIES ─────────────────────────────────────────────────────────────────
  * GET   /api/jobs/technician/{id}/active Check if Technician is in active session
  * GET   /api/jobs/{id}/checkinout        Get check-in/out records for a session
@@ -248,6 +254,34 @@ public class JobController {
                         || a.getAuthority().contains("TECHNICIAN")
                         || a.getAuthority().contains("TEAM_LEAD"));
         return ResponseEntity.ok(jobService.getJobNotes(id, isStaff));
+    }
+
+    // ── JOB-009: Work Timer ────────────────────────────────────────────────────
+    @PostMapping("/{id}/timer/start")
+    @PreAuthorize("hasRole('TECHNICIAN')")
+    public ResponseEntity<JobTimerLog> startTimer(@PathVariable Long id,
+                                                   @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(jobService.startTimer(id, userId));
+    }
+
+    @PostMapping("/{id}/timer/pause")
+    @PreAuthorize("hasRole('TECHNICIAN')")
+    public ResponseEntity<JobTimerLog> pauseTimer(@PathVariable Long id,
+                                                   @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.ok(jobService.pauseTimer(id, userId));
+    }
+
+    @PostMapping("/{id}/timer/resume")
+    @PreAuthorize("hasRole('TECHNICIAN')")
+    public ResponseEntity<JobTimerLog> resumeTimer(@PathVariable Long id,
+                                                    @AuthenticationPrincipal Long userId) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(jobService.resumeTimer(id, userId));
+    }
+
+    @GetMapping("/{id}/timer")
+    @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<List<JobTimerDTO.LogResponse>> getTimerLogs(@PathVariable Long id) {
+        return ResponseEntity.ok(jobService.getJobTimerLogs(id));
     }
 
     // ── 13. Check if Technician is active today ───────────────────────────────

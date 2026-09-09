@@ -37,6 +37,7 @@ public class JobService {
     private final StockTransactionRepository stockTxnRepo;
     private final JobPhotoRepository         jobPhotoRepo;
     private final JobNoteRepository          jobNoteRepo;
+    private final JobTimerLogRepository      jobTimerLogRepo;
 
     public JobService(DaySessionRepository sessionRepo,
                       DaySessionMemberRepository memberRepo,
@@ -52,7 +53,8 @@ public class JobService {
                       VehicleService vehicleService,
                       StockTransactionRepository stockTxnRepo,
                       JobPhotoRepository jobPhotoRepo,
-                      JobNoteRepository jobNoteRepo) {
+                      JobNoteRepository jobNoteRepo,
+                      JobTimerLogRepository jobTimerLogRepo) {
         this.sessionRepo         = sessionRepo;
         this.memberRepo          = memberRepo;
         this.jobRepo             = jobRepo;
@@ -68,6 +70,7 @@ public class JobService {
         this.stockTxnRepo        = stockTxnRepo;
         this.jobPhotoRepo        = jobPhotoRepo;
         this.jobNoteRepo         = jobNoteRepo;
+        this.jobTimerLogRepo     = jobTimerLogRepo;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -808,6 +811,67 @@ public class JobService {
                 .authorRole(note.getAddedByRole())
                 .createdAt(note.getCreatedAt())
                 .build();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 5d. WORK TIMER (JOB-009) — start/pause/resume, persisted as one row per
+    // worked interval so a pause/resume cycle can be reconstructed and summed
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Transactional
+    public JobTimerLog startTimer(Long jobId, Long userId) {
+        Job job = findJobOrThrow(jobId);
+        if (job.getStatus() != Job.JobStatus.IN_PROGRESS) {
+            throw new RuntimeException("The work timer can only be started while the job is IN_PROGRESS.");
+        }
+        if (jobTimerLogRepo.findByJobIdAndStoppedAtIsNull(jobId).isPresent()) {
+            throw new RuntimeException("The work timer is already running for this job.");
+        }
+        return jobTimerLogRepo.save(JobTimerLog.builder()
+            .jobId(jobId)
+            .startedAt(LocalDateTime.now())
+            .build());
+    }
+
+    @Transactional
+    public JobTimerLog pauseTimer(Long jobId, Long userId) {
+        findJobOrThrow(jobId);
+        JobTimerLog open = jobTimerLogRepo.findByJobIdAndStoppedAtIsNull(jobId)
+            .orElseThrow(() -> new RuntimeException("There is no running work timer for this job to pause."));
+
+        LocalDateTime now = LocalDateTime.now();
+        open.setStoppedAt(now);
+        open.setDurationSeconds(java.time.Duration.between(open.getStartedAt(), now).getSeconds());
+        return jobTimerLogRepo.save(open);
+    }
+
+    @Transactional
+    public JobTimerLog resumeTimer(Long jobId, Long userId) {
+        findJobOrThrow(jobId);
+        if (jobTimerLogRepo.findByJobIdAndStoppedAtIsNull(jobId).isPresent()) {
+            throw new RuntimeException("The work timer is already running for this job.");
+        }
+        if (jobTimerLogRepo.findByJobId(jobId).isEmpty()) {
+            throw new RuntimeException("The work timer has not been started for this job yet.");
+        }
+        return jobTimerLogRepo.save(JobTimerLog.builder()
+            .jobId(jobId)
+            .startedAt(LocalDateTime.now())
+            .build());
+    }
+
+    @Transactional(readOnly = true)
+    public List<JobTimerDTO.LogResponse> getJobTimerLogs(Long jobId) {
+        findJobOrThrow(jobId);
+        return jobTimerLogRepo.findByJobId(jobId).stream()
+            .map(l -> JobTimerDTO.LogResponse.builder()
+                .id(l.getId())
+                .jobId(l.getJobId())
+                .startedAt(l.getStartedAt())
+                .stoppedAt(l.getStoppedAt())
+                .durationSeconds(l.getDurationSeconds())
+                .build())
+            .collect(Collectors.toList());
     }
 
     // ══════════════════════════════════════════════════════════════════════════
