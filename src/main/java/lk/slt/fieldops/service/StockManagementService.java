@@ -520,8 +520,8 @@ public class StockManagementService {
     // ─── Search Stock (technician inventory browser) ──────
 
     public List<StockDTO.StockLevelDTO>
-    searchStockLevels(String search, Long categoryId) {
-        log.debug("Searching materials: search={}, categoryId={}", search, categoryId);
+    searchStockLevels(String search, Long categoryId, Boolean isFoc) {
+        log.debug("Searching materials: search={}, categoryId={}, isFoc={}", search, categoryId, isFoc);
 
         List<Material> materials;
         boolean hasSearch = search != null && !search.isBlank();
@@ -534,6 +534,15 @@ public class StockManagementService {
             materials = materialRepository.findByCategoryId(categoryId);
         } else {
             materials = materialRepository.findAllActive();
+        }
+
+        // RES-001/RES-014 — ?isFoc= was previously undeclared and silently ignored, so the
+        // whole catalogue (chargeable items included) always came back regardless.
+        if (isFoc != null) {
+            Material.ChargeType wanted = isFoc ? Material.ChargeType.FOC : Material.ChargeType.CHARGEABLE;
+            materials = materials.stream()
+                    .filter(m -> m.getChargeType() == wanted)
+                    .collect(Collectors.toList());
         }
 
         return materials.stream()

@@ -32,6 +32,7 @@ public class JobService {
     private final FaultHistoryRepository     faultHistoryRepo;
     private final MaterialRequestRepository  materialRequestRepo;
     private final NotificationService        notificationService;
+    private final VehicleService             vehicleService;
 
     public JobService(DaySessionRepository sessionRepo,
                       DaySessionMemberRepository memberRepo,
@@ -43,7 +44,8 @@ public class JobService {
                       FaultRepository faultRepo,
                       FaultHistoryRepository faultHistoryRepo,
                       MaterialRequestRepository materialRequestRepo,
-                      NotificationService notificationService) {
+                      NotificationService notificationService,
+                      VehicleService vehicleService) {
         this.sessionRepo         = sessionRepo;
         this.memberRepo          = memberRepo;
         this.jobRepo             = jobRepo;
@@ -55,6 +57,7 @@ public class JobService {
         this.faultHistoryRepo    = faultHistoryRepo;
         this.materialRequestRepo = materialRequestRepo;
         this.notificationService = notificationService;
+        this.vehicleService      = vehicleService;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -93,6 +96,15 @@ public class JobService {
         } catch (DataIntegrityViolationException e) {
             // Race: another request created today's session between the exists() check above and this save
             throw new DuplicateSessionException("You have already checked in today.");
+        }
+
+        // RES-008 — a BOD carrying a vehicleId must actually book the vehicle out for the day
+        // (custody + mileage audit trail), not just record the id on this session row.
+        // VehicleService.assignVehicle enforces the same "one vehicle, one Team Lead, one day"
+        // and "vehicle must be AVAILABLE" rules performBod would otherwise silently bypass.
+        if (request.getVehicleId() != null) {
+            vehicleService.assignVehicle(request.getVehicleId(), teamLeadId, teamLeadName,
+                    saved.getId(), request.getOdometerStart());
         }
 
         // 2. Add each technician as a session member
@@ -177,6 +189,12 @@ public class JobService {
         session.setEodOdometer(request.getOdometerEnd());
         session.setEodNotes(request.getNotes());
         sessionRepo.save(session);
+
+        // RES-008 — close out the day's vehicle_assignments row (if BOD actually booked one
+        // out) so distance_km gets computed and the vehicle's mileage becomes queryable.
+        if (session.getBodVehicleId() != null && request.getOdometerEnd() != null) {
+            vehicleService.closeAssignment(teamLeadId, request.getOdometerEnd());
+        }
 
         // 4. Update the team lead's check-in record to a check-out
         checkInOutRepo.findActiveCheckInByUserId(teamLeadId).ifPresent(checkIn -> {

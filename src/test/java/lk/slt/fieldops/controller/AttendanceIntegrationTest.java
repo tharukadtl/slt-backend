@@ -151,13 +151,21 @@ class AttendanceIntegrationTest {
      * The EOD gate requires every session technician to have checked out today
      * ({@code JobService.performEod}), so the fixture gives the technician a completed
      * check-in/check-out for today.
+     *
+     * <p>Anchored to fixed times on today's calendar date rather than
+     * {@code LocalDateTime.now().minusHours(8)} — the CI runner's JVM default timezone is UTC,
+     * so a relative offset crosses midnight (and out of "today" per
+     * {@code CheckInOutRepository.findTodayByUserId}'s {@code checkInTime >= startOfDay} check)
+     * whenever the suite happens to run before 08:00 UTC, failing this fixture's own EOD call
+     * with "has not checked out" for reasons unrelated to whatever the test is actually
+     * asserting.</p>
      */
     private void checkTechnicianInAndOut(User tech) {
         CheckInOut row = new CheckInOut();
         row.setUser(tech);
         row.setCheckType("ATTENDANCE");
-        row.setCheckInTime(LocalDateTime.now().minusHours(8));
-        row.setCheckOutTime(LocalDateTime.now().minusMinutes(5));
+        row.setCheckInTime(LocalDate.now().atTime(8, 0));
+        row.setCheckOutTime(LocalDate.now().atTime(16, 0));
         row.setStatus("CHECKED_OUT");
         checkInOutRepo.save(row);
     }
