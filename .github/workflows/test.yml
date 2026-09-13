@@ -22,9 +22,28 @@ jobs:
         run: ./mvnw test
 
       # Surefire already writes JUnit XML to target/surefire-reports/ with no
-      # config needed -- this just reads what's already there. if: always()
-      # so a summary appears even when tests fail, which is when it matters
-      # most. ubuntu-latest ships python3 by default, no setup step needed.
+      # config needed -- this just reads what's already there, splitting the
+      # one real `mvn test` run into labeled sections by package instead of
+      # re-running Testcontainers per category. if: always() so a summary
+      # appears even when tests fail, which is when it matters most.
+      # ubuntu-latest ships python3 by default, no setup step needed.
       - name: Test summary
         if: always()
-        run: python3 .github/scripts/summarize_junit.py "target/surefire-reports/TEST-*.xml"
+        run: |
+          python3 .github/scripts/summarize_junit.py "target/surefire-reports/TEST-*.xml" \
+            --group "Unit Tests=lk.slt.fieldops.service.,lk.slt.fieldops.dto.,lk.slt.fieldops.config." \
+            --group "API/Integration Tests=lk.slt.fieldops.controller.,lk.slt.fieldops.websocket." \
+            --group "Security Tests=lk.slt.fieldops.security."
+
+      # JaCoCo's `report` execution (pom.xml, bound to the test phase) already
+      # wrote target/site/jacoco/ during `mvn test` above -- upload both that
+      # and the raw Surefire XML so they're downloadable from the run.
+      - name: Upload test & coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-and-coverage-reports
+          path: |
+            target/surefire-reports/*.xml
+            target/site/jacoco/
+          retention-days: 30
