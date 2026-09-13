@@ -1,5 +1,6 @@
 package lk.slt.fieldops.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -85,6 +86,15 @@ public class StockDTO {
         private Integer maxThreshold;
         private Double unitPrice;
         private Double totalValue;
+        // Lombok's getter for a boolean field already named "isFOC" is isFOC() (it doesn't double
+        // the "is" prefix), and Jackson's own bean-getter mangling for that getter name produces
+        // the JSON key "foc" -- confirmed empirically against a real running response (RES-001/
+        // RES-014's InventoryIntegrationTest), not assumed. frontend-admin's InventoryPage.js
+        // reads material.isFOC with no fallback, and SLTMobileApp's ResourceManagementScreen.tsx
+        // already had to add a defensive `s.isFOC ?? s.fOC ?? s.foc` fallback chain -- both real
+        // consumers already expect "isFOC" as the literal key. @JsonProperty pins that explicitly
+        // instead of leaving it to Jackson's mangling.
+        @JsonProperty("isFOC")
         private boolean isFOC;
         private String stockStatus;
         private String stockStatusColor;

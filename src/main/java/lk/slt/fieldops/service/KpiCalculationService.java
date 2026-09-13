@@ -872,6 +872,7 @@ public class KpiCalculationService {
         String status =
                 calculateTargetStatus(
                         progress,
+                        target.getStartDate(),
                         target.getDueDate());
 
         return KpiDTO.TargetResponseDTO.builder()
@@ -958,8 +959,16 @@ public class KpiCalculationService {
                 Math.max(0, overall));
     }
 
+    // KpiIntegrationTest.adminAssignsTarget_returns201Active — this used to grade every target
+    // against fixed absolute progress thresholds (>=75 ON_TRACK, >=50 AT_RISK, else BEHIND)
+    // regardless of how much of the target's own window had actually elapsed, so a target
+    // assigned today with 0% progress and three weeks left was reported BEHIND on day one,
+    // identically to one genuinely behind on its last day. Now graded against the progress
+    // expected for the fraction of the start-to-due-date window already elapsed, so "just
+    // assigned" and "behind pace" are no longer indistinguishable.
     private String calculateTargetStatus(
             double progress,
+            LocalDate startDate,
             LocalDate dueDate) {
         if (progress >= 100) {
             return KpiDTO.STATUS_ACHIEVED;
@@ -980,9 +989,24 @@ public class KpiCalculationService {
             return KpiDTO.STATUS_BEHIND;
         }
 
-        if (progress >= 75) {
+        // How far progress should realistically be if it were keeping even pace across the
+        // target's own start-to-due-date window. No startDate on record (pre-existing rows
+        // created before this field was populated) falls back to the old date-blind grading
+        // via a 100%-elapsed assumption, same effective behaviour as before for those rows.
+        double expectedProgress = 100;
+        if (startDate != null) {
+            long totalDays = java.time.temporal.ChronoUnit.DAYS.between(startDate, dueDate);
+            long elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(startDate, LocalDate.now());
+            double fractionElapsed = totalDays > 0
+                    ? Math.min(1.0, Math.max(0.0, elapsedDays / (double) totalDays))
+                    : 1.0;
+            expectedProgress = fractionElapsed * 100;
+        }
+
+        double paceDeficit = expectedProgress - progress;
+        if (paceDeficit <= 10) {
             return KpiDTO.STATUS_ON_TRACK;
-        } else if (progress >= 50) {
+        } else if (paceDeficit <= 30) {
             return KpiDTO.STATUS_AT_RISK;
         } else {
             return KpiDTO.STATUS_BEHIND;

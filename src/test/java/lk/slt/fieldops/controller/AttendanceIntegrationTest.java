@@ -71,15 +71,25 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * helpers. Two facts about the real attendance surface that all four have to work around, stated
  * once here:</p>
  * <ul>
- *   <li><b>The attendance record has no odometer.</b> Neither {@code CheckInOut} nor
- *       {@code AttendanceDTO.CheckInRequest}/{@code CheckOutRequest} carries one; the readings live
- *       on {@code day_sessions} via the Team Lead's {@code POST /api/jobs/bod} / {@code /eod},
- *       which is what {@link #odometerDiff_mileageCalculated()} above drives. Sending the sheet's
- *       {@code odometer} field on an attendance body would additionally be hard-rejected with 400
+ *   <li><b>2026-09-13 correction: the attendance record DOES have an odometer now.</b> ATT-008
+ *       added {@code odometerStart}/{@code odometerEnd}/{@code distanceKm} to
+ *       {@code AttendanceDTO.CheckInRequest}/{@code CheckOutRequest}/{@code AttendanceResponse}
+ *       and wired them through {@code AttendanceService} (confirmed by reading the current
+ *       source directly: {@code checkIn}/{@code checkOut} call
+ *       {@code setOdometerStart}/{@code setOdometerEnd}, {@code mapToResponse} computes
+ *       {@code distanceKm} via {@code getDailyMileage}) -- this bullet previously claimed
+ *       otherwise and {@link #checkOut_returns200WithJobSummary()} below was still written
+ *       against that stale claim (not sending either reading, and checking a
+ *       {@code dailyMileage} field that was never the real one) until this same investigation
+ *       fixed it. {@code day_sessions}' separate {@code bod_odometer}/{@code eod_odometer} via
+ *       the Team Lead's {@code POST /api/jobs/bod}/{@code /eod} (what
+ *       {@link #odometerDiff_mileageCalculated()} above drives) still exists as a second,
+ *       parallel mechanism -- unrelated to this correction, not evaluated here. Sending the
+ *       sheet's {@code odometer} field (as opposed to the real {@code odometerStart}/
+ *       {@code odometerEnd}) on an attendance body would still be hard-rejected with 400
  *       "Unrecognized field", because {@code AppConfig} declares a {@code @Primary} hand-built
  *       {@code ObjectMapper} that discards {@code application.yml}'s
- *       {@code fail-on-unknown-properties: false} (established on sheet 06, KPI-003). So these rows
- *       send only fields the API declares; the odometer gap itself is ATT-011's subject.</li>
+ *       {@code fail-on-unknown-properties: false} (established on sheet 06, KPI-003).</li>
  *   <li><b>There is no {@code GET /api/attendance/{id}} and no {@code GET /api/attendance?...}
  *       collection route.</b> {@code AttendanceController} exposes {@code /check-in},
  *       {@code /check-out}, {@code /today/{userId}}, {@code /me/today}, {@code /history/{userId}},
@@ -425,7 +435,7 @@ class AttendanceIntegrationTest {
         // ── Arrange: a technician who checked in this morning and completed 2 jobs ───────
         User tech = newUser(User.Role.TECHNICIAN, "Tech Nimal");
         userRepo.flush();
-        checkIn(tech, "{\"latitude\":6.9271,\"longitude\":79.8612}");
+        checkIn(tech, "{\"latitude\":6.9271,\"longitude\":79.8612,\"odometerStart\":" + BOD_ODOMETER + "}");
         completedJobToday(tech);
         completedJobToday(tech);
         jobRepo.flush();
@@ -435,7 +445,7 @@ class AttendanceIntegrationTest {
         MvcResult res = mvc.perform(post("/api/attendance/check-out")
                 .header("Authorization", bearer(tech.getId(), "TECHNICIAN"))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"latitude\":6.93,\"longitude\":79.86}"))
+                .content("{\"latitude\":6.93,\"longitude\":79.86,\"odometerEnd\":" + EOD_ODOMETER + "}"))
             .andReturn();
 
         String body = res.getResponse().getContentAsString();
@@ -471,10 +481,19 @@ class AttendanceIntegrationTest {
                     + "ones. Body: " + body),
 
             // ── Step 6: the day's mileage ───────────────────────────────────────────────
-            () -> assertEquals(150, out.path("dailyMileage").asInt(),
-                "EOD must report the day's mileage (15350 - 15200 = 150 km). The attendance "
-                    + "path captures no odometer at either end — see the class javadoc and "
-                    + "ATT-011 — so there is nothing to subtract. Body: " + body),
+            // 2026-09-13 correction: the class javadoc's ATT-011 note ("the attendance path
+            // captures no odometer at either end") is stale -- ATT-008 added odometerStart/
+            // odometerEnd/distanceKm to AttendanceDTO.CheckInRequest/CheckOutRequest/
+            // AttendanceResponse and wired them through AttendanceService (confirmed by
+            // reading the current source directly, not assumed: checkIn/checkOut call
+            // setOdometerStart/setOdometerEnd, and mapToResponse computes distanceKm via
+            // getDailyMileage). This test just wasn't sending the readings or reading the
+            // real response field ("distanceKm", already the field SLTMobileApp's
+            // HomeScreen.tsx/technician.types.ts actually consume -- not "dailyMileage",
+            // which appears nowhere in any real consumer).
+            () -> assertEquals(150, out.path("distanceKm").asInt(),
+                "EOD must report the day's mileage (15350 - 15200 = 150 km) via distanceKm. "
+                    + "Body: " + body),
 
             // ── And the persisted row must agree with the response ──────────────────────
             () -> {
