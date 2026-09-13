@@ -62,8 +62,14 @@ public class VehicleController {
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
     public ResponseEntity<List<Vehicle>> getVehicles(
             @RequestParam(required = false) Long    opmcId,
-            @RequestParam(required = false) Boolean activeOnly) {
+            @RequestParam(required = false) Boolean activeOnly,
+            @RequestParam(required = false) String  status) {
 
+        // RES-001/RES-014 — status takes precedence when supplied, rather than being
+        // silently discarded as an unbound parameter.
+        if (status != null && !status.isBlank()) {
+            return ResponseEntity.ok(vehicleService.getByStatus(opmcId, status));
+        }
         if (opmcId != null && Boolean.TRUE.equals(activeOnly)) {
             return ResponseEntity.ok(vehicleService.getActiveByOpmc(opmcId));
         }
@@ -122,6 +128,22 @@ public class VehicleController {
     public ResponseEntity<List<VehicleAssignment>> getAssignmentHistory(
             @PathVariable Long id) {
         return ResponseEntity.ok(vehicleService.getAssignmentHistory(id));
+    }
+
+    // ── DAILY MILEAGE (RES-008) ───────────────────────────────────────────────
+    @GetMapping("/{id}/mileage")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN','TEAM_LEAD')")
+    public ResponseEntity<Map<String, Object>> getDailyMileage(
+            @PathVariable Long id,
+            @RequestParam(required = false) java.time.LocalDate date) {
+        java.time.LocalDate targetDate = date != null ? date : java.time.LocalDate.now();
+        Integer mileage = vehicleService.getDailyMileage(id, targetDate);
+
+        Map<String, Object> body = new java.util.HashMap<>();
+        body.put("vehicleId", id);
+        body.put("date", targetDate.toString());
+        body.put("dailyMileage", mileage);
+        return ResponseEntity.ok(body);
     }
 
     // ── EXPIRY ALERTS (within 30 days) ───────────────────────────────────────

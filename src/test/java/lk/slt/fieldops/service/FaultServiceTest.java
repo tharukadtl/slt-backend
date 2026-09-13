@@ -12,6 +12,7 @@ import lk.slt.fieldops.repository.FaultHistoryRepository;
 import lk.slt.fieldops.repository.FaultNoteRepository;
 import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.UserRepository;
+import lk.slt.fieldops.websocket.WebSocketEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,6 +57,7 @@ class FaultServiceTest {
     @Mock private ExchangeService        exchangeService;
     @Mock private CircuitRepository      circuitRepo;
     @Mock private CauseOfFaultRepository causeOfFaultRepo;
+    @Mock private WebSocketEventPublisher webSocketEventPublisher;
 
     private FaultService faultService;
 
@@ -66,7 +68,7 @@ class FaultServiceTest {
     @BeforeEach
     void setUp() {
         faultService = new FaultService(faultRepo, historyRepo, noteRepo, userRepo,
-            notificationService, exchangeService, circuitRepo, causeOfFaultRepo);
+            notificationService, exchangeService, circuitRepo, causeOfFaultRepo, webSocketEventPublisher);
     }
 
     private Fault reportedFault() {

@@ -206,10 +206,17 @@ public class SecurityConfig {
                     // requests are keyed per-user (NFR 7.1.3); everything else is keyed per-IP.
                     String rateLimitKey = tokenValid ? "user:" + userId : "ip:" + clientIp;
                     if (!rateLimitService.tryAcquire(rateLimitKey)) {
+                        // AUTH-017 — tell the client when the window resets, not just that it's shut.
+                        res.setHeader("Retry-After",
+                            String.valueOf(rateLimitService.getRetryAfterSeconds(rateLimitKey)));
                         res.setStatus(429); // Too Many Requests
                         res.setContentType("application/json");
+                        // SEC-006 — reflect the REAL configured cap, not a hardcoded number that
+                        // goes stale the moment app.rate-limit.max-requests-per-minute is overridden.
                         res.getWriter().write(
-                            "{\"error\":\"Rate limit exceeded. Maximum 100 requests per minute.\"}");
+                            "{\"error\":\"Rate limit exceeded. Maximum "
+                                + rateLimitService.getMaxRequestsPerMinute()
+                                + " requests per minute.\"}");
                         return;
                     }
 

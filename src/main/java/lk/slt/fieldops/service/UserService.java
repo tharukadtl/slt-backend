@@ -103,7 +103,7 @@ public class UserService {
         // being requested — an Admin may only create users inside their own
         // OPMC. Super Admin is unscoped. Same pattern as
         // WorkGroupController.assertSameOpmcUnlessSuperAdmin.
-        assertSameOpmcUnlessSuperAdmin(req.getOpmcId(), callerId);
+        assertSameOpmcUnlessSuperAdmin(req.getOpmcId(), role, callerId);
 
         // Requiredness is intentionally unchanged — SUPER_ADMIN/CLIENT legitimately
         // have no OPMC, per real data. Only validate a *supplied* opmcId
@@ -157,7 +157,7 @@ public class UserService {
         // unscoped. Checked against the target's OPMC as it stands before this
         // edit, mirroring WorkGroupController.assertSameOpmcUnlessSuperAdmin,
         // which checks the fetched entity before applying an update.
-        assertSameOpmcUnlessSuperAdmin(user.getOpmcId(), callerId);
+        assertSameOpmcUnlessSuperAdmin(user.getOpmcId(), user.getRole(), callerId);
 
         user.setFullName(req.getFullName());
         user.setEmail(blankToNull(req.getEmail()));
@@ -226,14 +226,35 @@ public class UserService {
         }
     }
 
+    /** Roles with no OPMC concept in the org hierarchy at all (SRS 5.5.0) — see the
+     * requiredness comment in createUser: "SUPER_ADMIN/CLIENT legitimately have no
+     * OPMC, per real data". ADMIN/TEAM_LEAD/TECHNICIAN are deliberately absent —
+     * they DO structurally belong to exactly one OPMC. */
+    private static final java.util.Set<User.Role> ROLES_WITHOUT_OPMC =
+            java.util.Set.of(User.Role.SUPER_ADMIN, User.Role.CLIENT);
+
     /**
      * An Admin may only act on users within their own OPMC; Super Admin is
      * unscoped. Reuses WorkGroupController.assertSameOpmcUnlessSuperAdmin's
      * exact pattern, applied to user management instead of Work Groups.
+     *
+     * <p>RES-024 follow-up (MaterialRequestWorkGroupFallbackTest#rolesWithoutWorkGroup_
+     * remainCreatableWithoutOne) — a plain ADMIN creating/editing a CLIENT (or a
+     * SUPER_ADMIN) with no opmcId at all previously hit this guard's blanket
+     * "targetOpmcId == null is a violation" branch every single time, since
+     * neither role is required to carry one: a genuinely absent target OPMC isn't
+     * evidence of a boundary violation for these two roles the way it would be for
+     * one (ADMIN/TEAM_LEAD/TECHNICIAN) that DOES belong to one. Bypass is scoped to
+     * exactly "role allowed to have none, AND actually has none right now" — a
+     * CLIENT (or SUPER_ADMIN) that DOES carry a real opmcId, e.g. a Client
+     * registered against a specific OPMC's territory, still has that OPMC's
+     * boundary enforced unchanged (UserServiceAccessControlTest's cross-OPMC
+     * CLIENT-target tests rely on exactly this).
      */
-    private void assertSameOpmcUnlessSuperAdmin(Long targetOpmcId, Long callerId) {
+    private void assertSameOpmcUnlessSuperAdmin(Long targetOpmcId, User.Role targetRole, Long callerId) {
         User caller = findOrThrow(callerId);
         if (caller.getRole() == User.Role.SUPER_ADMIN) return;
+        if (targetOpmcId == null && ROLES_WITHOUT_OPMC.contains(targetRole)) return;
 
         Long callerOpmcId = caller.getOpmcId();
         if (callerOpmcId == null || targetOpmcId == null || !callerOpmcId.equals(targetOpmcId)) {
@@ -244,7 +265,7 @@ public class UserService {
     @Transactional
     public void deactivateUser(Long id, Long callerId) {
         User user = findOrThrow(id);
-        assertSameOpmcUnlessSuperAdmin(user.getOpmcId(), callerId);
+        assertSameOpmcUnlessSuperAdmin(user.getOpmcId(), user.getRole(), callerId);
         user.setIsActive(false);
         userRepo.save(user);
         logAudit(user, UserAuditLog.Action.DEACTIVATED, callerId, null, null);

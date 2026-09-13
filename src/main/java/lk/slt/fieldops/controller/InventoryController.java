@@ -78,6 +78,36 @@ public class InventoryController {
         return ResponseEntity.ok(materialRequestService.approveRequest(id, req, userId));
     }
 
+    // RES-012 — one call approving every request in a batch, instead of one PATCH per request.
+    // Reuses approveRequest's own logic (Work Group boundary, stock deduction) per id, so an
+    // empty ApproveRequest per id approves the full originally-requested quantity exactly like
+    // the single-request endpoint's own default already does.
+    @PostMapping("/material-requests/bulk-approve")
+    @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
+    public ResponseEntity<java.util.Map<String, Object>> bulkApprove(
+            @Valid @RequestBody MaterialRequestDTO.BulkApproveRequest req,
+            @AuthenticationPrincipal Long userId) {
+        log.info("POST /api/inventory/material-requests/bulk-approve ids={}", req.getIds());
+
+        List<Long> approvedIds = new java.util.ArrayList<>();
+        List<java.util.Map<String, Object>> failures = new java.util.ArrayList<>();
+        for (Long id : req.getIds()) {
+            try {
+                materialRequestService.approveRequest(
+                        id, MaterialRequestDTO.ApproveRequest.builder().build(), userId);
+                approvedIds.add(id);
+            } catch (Exception e) {
+                failures.add(java.util.Map.of("id", id,
+                        "error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()));
+            }
+        }
+
+        return ResponseEntity.ok(java.util.Map.of(
+                "approvedIds", approvedIds,
+                "approvedCount", approvedIds.size(),
+                "failures", failures));
+    }
+
     @PostMapping("/material-requests/{id}/reject")
     @PreAuthorize("hasAnyRole('TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<MaterialRequestDTO.RequestResponse> rejectRequest(
@@ -161,9 +191,11 @@ public class InventoryController {
     @PreAuthorize("hasAnyRole('TECHNICIAN','TEAM_LEAD','ADMIN','SUPER_ADMIN')")
     public ResponseEntity<List<StockDTO.StockLevelDTO>> searchMaterials(
             @RequestParam(required = false) String search,
-            @RequestParam(required = false) Long categoryId) {
-        log.info("GET /api/inventory/materials/search search={}, categoryId={}", search, categoryId);
-        return ResponseEntity.ok(stockManagementService.searchStockLevels(search, categoryId));
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Boolean isFoc) {
+        log.info("GET /api/inventory/materials/search search={}, categoryId={}, isFoc={}",
+            search, categoryId, isFoc);
+        return ResponseEntity.ok(stockManagementService.searchStockLevels(search, categoryId, isFoc));
     }
 
     // ── Material CRUD ─────────────────────────────────────────────────────────

@@ -4,11 +4,15 @@ import lk.slt.fieldops.dto.ReviewPaymentRequest;
 import lk.slt.fieldops.dto.SubmitPaymentRequest;
 import lk.slt.fieldops.entity.Fault;
 import lk.slt.fieldops.entity.Job;
+import lk.slt.fieldops.entity.Material;
 import lk.slt.fieldops.entity.Payment;
 import lk.slt.fieldops.entity.PaymentApproval;
+import lk.slt.fieldops.entity.PaymentMaterial;
 import lk.slt.fieldops.repository.FaultRepository;
 import lk.slt.fieldops.repository.JobRepository;
+import lk.slt.fieldops.repository.MaterialRepository;
 import lk.slt.fieldops.repository.PaymentApprovalRepository;
+import lk.slt.fieldops.repository.PaymentMaterialRepository;
 import lk.slt.fieldops.repository.PaymentRepository;
 import lk.slt.fieldops.repository.UserRepository;
 import lk.slt.fieldops.websocket.WebSocketEventPublisher;
@@ -80,6 +84,9 @@ class PaymentServiceTest {
     @Mock private WebSocketEventPublisher   webSocketEventPublisher;
     @Mock private UserRepository            userRepository;
     @Mock private NotificationService       notificationService;
+    @Mock private PaymentMaterialRepository paymentMaterialRepo;
+    @Mock private MaterialRepository        materialRepo;
+    @org.mockito.Spy private FocDeterminator focDeterminator = new FocDeterminator();
 
     @InjectMocks private PaymentService paymentService;
 

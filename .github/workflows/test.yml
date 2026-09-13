@@ -22,9 +22,72 @@ jobs:
         run: ./mvnw test
 
       # Surefire already writes JUnit XML to target/surefire-reports/ with no
-      # config needed -- this just reads what's already there. if: always()
-      # so a summary appears even when tests fail, which is when it matters
-      # most. ubuntu-latest ships python3 by default, no setup step needed.
+      # config needed -- this just reads what's already there, splitting the
+      # one real `mvn test` run into labeled sections by package instead of
+      # re-running Testcontainers per category. if: always() so a summary
+      # appears even when tests fail, which is when it matters most.
+      # ubuntu-latest ships python3 by default, no setup step needed.
+      #
+      # 2026-09-13 reconciliation: the original three groups' package prefixes summed to
+      # 358 against a real 386-test total (confirmed by summing every <testsuite tests=...>
+      # in this same job's own surefire-reports, not assumed) -- 28 tests in
+      # lk.slt.fieldops.{entity,shared,shared.exception} and the bare lk.slt.fieldops root
+      # package matched no group. Read each straggler class's own source to place it by
+      # what it actually verifies, not its package name alone:
+      #   - entity.PaymentMaterialTest: a plain domain-entity/schema-shape unit test -> Unit.
+      #   - shared.HpCodeProvinceMappingTest: its own javadoc calls itself "a unit test for
+      #     a pure function" (no Spring context, no DB, no HTTP) -> Unit.
+      #   - shared.exception.GlobalExceptionHandlerDuplicateSessionTest: calls the handler
+      #     method directly with plain JUnit assertions, no Spring context -> Unit.
+      #   - shared.OpmcAccessGuardTest: Mockito-only unit test of an RBAC/OPMC-boundary
+      #     authorization guard (asserts AccessDeniedException) -- a security concern
+      #     despite living in the shared package, not a generic unit test -> Security.
+      #   - ApplicationTests (lk.slt.fieldops root): a bare @SpringBootTest contextLoads()
+      #     smoke test -- doesn't genuinely test a unit of business logic, an API endpoint,
+      #     or a security policy, so it doesn't belong in any of the three. Left uncovered
+      #     here deliberately: summarize_junit.py's --group support now auto-collects
+      #     anything matching no group into a trailing "Other" section, so this (and any
+      #     future stray class in a package none of these entries cover) surfaces there
+      #     instead of silently vanishing from the categorized breakdown again.
+      # shared.HpCodeProvinceMappingTest and shared.OpmcAccessGuardTest share one package
+      # with no distinguishing subpackage, so a broad "lk.slt.fieldops.shared." prefix
+      # could not route them differently -- both are listed here as exact class names
+      # (no trailing dot) instead.
       - name: Test summary
         if: always()
-        run: python3 .github/scripts/summarize_junit.py "target/surefire-reports/TEST-*.xml"
+        run: |
+          python3 .github/scripts/summarize_junit.py "target/surefire-reports/TEST-*.xml" \
+            --group "Unit Tests=lk.slt.fieldops.service.,lk.slt.fieldops.dto.,lk.slt.fieldops.config.,lk.slt.fieldops.entity.,lk.slt.fieldops.shared.HpCodeProvinceMappingTest,lk.slt.fieldops.shared.exception.GlobalExceptionHandlerDuplicateSessionTest" \
+            --group "API/Integration Tests=lk.slt.fieldops.controller.,lk.slt.fieldops.websocket." \
+            --group "Security Tests=lk.slt.fieldops.security.,lk.slt.fieldops.shared.OpmcAccessGuardTest"
+
+      # JaCoCo's `report` execution (pom.xml, bound to the test phase) already
+      # wrote target/site/jacoco/ during `mvn test` above when every test
+      # passed. But Surefire fails the build the instant a test fails, which
+      # aborts the reactor before that same-phase report execution gets to
+      # run -- so on a red build target/site/jacoco/ would otherwise never
+      # exist. `jacoco:report` run bare doesn't re-execute tests: it just
+      # reads the target/jacoco.exec this JVM already wrote and the classes
+      # `mvn test` already compiled, so this is a real no-op when the report
+      # above already ran, and the only way to get coverage when tests fail.
+      - name: Generate coverage report
+        if: always()
+        run: ./mvnw jacoco:report
+
+      # Two separate artifacts (raw test results vs. coverage) so each is
+      # independently downloadable from the run regardless of pass/fail.
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-test-results
+          path: target/surefire-reports/*.xml
+          retention-days: 30
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-coverage-report
+          path: target/site/jacoco/
+          retention-days: 30

@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -98,6 +99,21 @@ public class GlobalExceptionHandler {
         body.put("message",   "Invalid value supplied for one or more request parameters.");
         body.put("timestamp", LocalDateTime.now().toString());
         return ResponseEntity.badRequest().body(body);
+    }
+
+    /**
+     * A request against an existing route with the wrong HTTP verb (e.g. POST on a PATCH-only
+     * mapping) must be 405, not fall through to the generic 500 handler below — it previously
+     * did, since this exception is a checked ServletException, not a RuntimeException.
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status",    405);
+        body.put("error",     "Method Not Allowed");
+        body.put("message",   ex.getMessage());
+        body.put("timestamp", LocalDateTime.now().toString());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(body);
     }
 
     @ExceptionHandler(RuntimeException.class)

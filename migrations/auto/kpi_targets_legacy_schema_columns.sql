@@ -3,20 +3,33 @@
 -- entity used to have and no longer does). See migrations/README.md for what "auto-applied" means here
 -- and why this file lives in migrations/auto/ rather than migrations/manual/ alongside its 12 siblings.
 --
--- kpi_targets carries 13 columns the current KpiTarget entity (src/main/java/lk/slt/fieldops/entity/
+-- kpi_targets carries 12 columns the current KpiTarget entity (src/main/java/lk/slt/fieldops/entity/
 -- KpiTarget.java) does not map at all: target_type, workgroup_id, technician_id, period_type,
--- period_year, period_month, period_week, target_jobs_completed, target_avg_resolution_hours,
+-- period_month, period_week, target_jobs_completed, target_avg_resolution_hours,
 -- target_first_time_fix_rate, target_customer_satisfaction, target_sla_compliance_rate, set_by_id.
 -- They are the remains of an earlier KpiTarget design (per-workgroup/technician targets on a
 -- DAILY/WEEKLY/MONTHLY period_type, evidently superseded by the current title/period/category/
 -- kpi_branch_id shape) — ddl-auto=update carried them forward forever since it never drops a column.
--- Three are NOT NULL with no default (target_type, period_type has a default so is fine, period_year
--- does not), so on a database built from ONLY the current entity mapping (a fresh Testcontainers
--- instance, or any DR rebuild from schema + migrations) no row can be written into this legacy shape
--- at all — surfaced as Hibernate SQLGrammarException "Unknown column 'target_type' in 'field list'"
+-- One is NOT NULL with no default (target_type; period_type has a default so is fine), so on a
+-- database built from ONLY the current entity mapping (a fresh Testcontainers instance, or any DR
+-- rebuild from schema + migrations) no row can be written into this legacy shape at all — surfaced as
+-- Hibernate SQLGrammarException "Unknown column 'target_type' in 'field list'"
 -- (KpiCalculationServiceQueryEfficiencyTest, KpiTargetServiceTest — both insert a fixture row through
 -- this legacy shape natively, since KpiCalculationService.assignTarget's own writes are a separate,
 -- already-documented defect: QA_Compliance_Consolidated_Report.md, KpiTargetServiceTest's own javadoc).
+--
+-- KPI-003 — period_year is deliberately NOT in this file's column list (even though it is one of the
+-- 13 legacy columns SHOW CREATE TABLE originally found, and is still NOT NULL with no default):
+-- KpiTarget.java now maps it directly (periodYear -> period_year), so ddl-auto=update creates it
+-- itself before this script ever runs (defer-datasource-initialization: true orders ddl-auto first).
+-- Leaving it in this ALTER TABLE's column list would collide with that ddl-auto-created column —
+-- and since a multi-clause ALTER TABLE is atomic, one "Duplicate column name 'period_year'" clause
+-- failing would silently take the other 12 legacy columns down with it (continue-on-error swallows
+-- the statement's error, but nothing in the statement had already committed) — confirmed exactly this
+-- way: adding the periodYear entity mapping without this removal broke target_type/workgroup_id/etc.
+-- for every fresh schema, surfacing as the identical "Unknown column 'target_type'" error this file
+-- exists to prevent. idx_kt_period below still indexes period_year — the column itself still exists,
+-- just created by a different owner now.
 --
 -- This is a genuine disaster-recovery gap independent of any test: 450 live rows (slt_fieldops_db,
 -- AUTO_INCREMENT=451 at time of writing) already carry real target_type/period_year data that a
@@ -43,7 +56,6 @@ ALTER TABLE kpi_targets
     ADD COLUMN workgroup_id BIGINT NULL,
     ADD COLUMN technician_id BIGINT NULL,
     ADD COLUMN period_type ENUM('DAILY', 'WEEKLY', 'MONTHLY') NOT NULL DEFAULT 'MONTHLY',
-    ADD COLUMN period_year SMALLINT NOT NULL,
     ADD COLUMN period_month TINYINT NULL,
     ADD COLUMN period_week TINYINT NULL,
     ADD COLUMN target_jobs_completed INT NOT NULL DEFAULT 0,

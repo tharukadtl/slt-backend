@@ -16,6 +16,9 @@ public interface VehicleAssignmentRepository extends JpaRepository<VehicleAssign
     /** Check if vehicle is already assigned today */
     boolean existsByVehicleIdAndAssignmentDate(Long vehicleId, LocalDate date);
 
+    /** The assignment (if any) carrying a given vehicle's mileage for a given day */
+    Optional<VehicleAssignment> findByVehicleIdAndAssignmentDate(Long vehicleId, LocalDate date);
+
     /** Get all assignments for a vehicle (mileage history) */
     List<VehicleAssignment> findByVehicleIdOrderByAssignmentDateDesc(Long vehicleId);
 

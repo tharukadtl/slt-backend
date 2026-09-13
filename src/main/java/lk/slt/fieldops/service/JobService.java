@@ -11,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,6 +33,11 @@ public class JobService {
     private final FaultHistoryRepository     faultHistoryRepo;
     private final MaterialRequestRepository  materialRequestRepo;
     private final NotificationService        notificationService;
+    private final VehicleService             vehicleService;
+    private final StockTransactionRepository stockTxnRepo;
+    private final JobPhotoRepository         jobPhotoRepo;
+    private final JobNoteRepository          jobNoteRepo;
+    private final JobTimerLogRepository      jobTimerLogRepo;
 
     public JobService(DaySessionRepository sessionRepo,
                       DaySessionMemberRepository memberRepo,
@@ -43,7 +49,12 @@ public class JobService {
                       FaultRepository faultRepo,
                       FaultHistoryRepository faultHistoryRepo,
                       MaterialRequestRepository materialRequestRepo,
-                      NotificationService notificationService) {
+                      NotificationService notificationService,
+                      VehicleService vehicleService,
+                      StockTransactionRepository stockTxnRepo,
+                      JobPhotoRepository jobPhotoRepo,
+                      JobNoteRepository jobNoteRepo,
+                      JobTimerLogRepository jobTimerLogRepo) {
         this.sessionRepo         = sessionRepo;
         this.memberRepo          = memberRepo;
         this.jobRepo             = jobRepo;
@@ -55,6 +66,11 @@ public class JobService {
         this.faultHistoryRepo    = faultHistoryRepo;
         this.materialRequestRepo = materialRequestRepo;
         this.notificationService = notificationService;
+        this.vehicleService      = vehicleService;
+        this.stockTxnRepo        = stockTxnRepo;
+        this.jobPhotoRepo        = jobPhotoRepo;
+        this.jobNoteRepo         = jobNoteRepo;
+        this.jobTimerLogRepo     = jobTimerLogRepo;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -93,6 +109,15 @@ public class JobService {
         } catch (DataIntegrityViolationException e) {
             // Race: another request created today's session between the exists() check above and this save
             throw new DuplicateSessionException("You have already checked in today.");
+        }
+
+        // RES-008 — a BOD carrying a vehicleId must actually book the vehicle out for the day
+        // (custody + mileage audit trail), not just record the id on this session row.
+        // VehicleService.assignVehicle enforces the same "one vehicle, one Team Lead, one day"
+        // and "vehicle must be AVAILABLE" rules performBod would otherwise silently bypass.
+        if (request.getVehicleId() != null) {
+            vehicleService.assignVehicle(request.getVehicleId(), teamLeadId, teamLeadName,
+                    saved.getId(), request.getOdometerStart());
         }
 
         // 2. Add each technician as a session member
@@ -177,6 +202,12 @@ public class JobService {
         session.setEodOdometer(request.getOdometerEnd());
         session.setEodNotes(request.getNotes());
         sessionRepo.save(session);
+
+        // RES-008 — close out the day's vehicle_assignments row (if BOD actually booked one
+        // out) so distance_km gets computed and the vehicle's mileage becomes queryable.
+        if (session.getBodVehicleId() != null && request.getOdometerEnd() != null) {
+            vehicleService.closeAssignment(teamLeadId, request.getOdometerEnd());
+        }
 
         // 4. Update the team lead's check-in record to a check-out
         checkInOutRepo.findActiveCheckInByUserId(teamLeadId).ifPresent(checkIn -> {
@@ -494,6 +525,7 @@ public class JobService {
         }
 
         validateJobTransition(job.getStatus(), newStatus);
+        Job.JobStatus oldStatus = job.getStatus();
 
         if ((newStatus == Job.JobStatus.HOLD || newStatus == Job.JobStatus.REJECTED) &&
             (request.getReason() == null || request.getReason().isBlank())) {
@@ -580,7 +612,7 @@ public class JobService {
             job.setCompletedAt(LocalDateTime.now());
             job.setCauseOfFault(request.getCauseOfFault());
             job.setCompletionRemarks(request.getCompletionRemarks());
-            job.setCompletionPhotoUrls(request.getCompletionPhotoUrls());
+            claimCompletionPhotos(job, request.getCompletionPhotoUrls());
 
             // SRS 5.3.1.3 (FR-9) — client unavailable or declined to sign. Does not block
             // completion at this level (confirmed: no signature is required to reach
@@ -631,6 +663,24 @@ public class JobService {
         }
         if (request.getWorkNotes() != null) {
             job.setWorkNotes(request.getWorkNotes());
+        }
+
+        // JOB-002/003 — every job status transition must leave an audit row, the same way
+        // FaultService.updateStatus already audits fault transitions. Kept on fault_history
+        // (there is no separate job_history table) since every Job here is tied to a Fault.
+        if (job.getFaultId() != null) {
+            User actor = userRepo.findById(userId).orElse(null);
+            final Job.JobStatus oldStatusRef = oldStatus;
+            final Job.JobStatus newStatusRef = newStatus;
+            faultRepo.findById(job.getFaultId()).ifPresent(fault ->
+                logJobRoutingHistory(fault, actor, "STATUS_CHANGED",
+                    "Job Status: " + oldStatusRef + " -> " + newStatusRef,
+                    (actor != null ? actor.getFullName() : "User #" + userId)
+                        + " updated job " + job.getJobNumber() + " status to " + newStatusRef
+                        + (request.getReason() != null && !request.getReason().isBlank()
+                            ? ". Reason: " + request.getReason() : "."),
+                    oldStatusRef != null ? oldStatusRef.name() : null,
+                    newStatusRef.name()));
         }
 
         return jobRepo.save(job);
@@ -685,6 +735,145 @@ public class JobService {
         }
     }
 
+    /**
+     * JOB-006/015 — completionPhotoUrls arrives as the same comma-separated list of URLs
+     * /api/uploads/photos returned; each URL was persisted there as an unclaimed JobPhoto
+     * (jobId null, carrying whatever photo_type was uploaded with it). Claims each one for
+     * this job rather than re-splitting the string into a fresh, untyped row every time — a
+     * URL with no matching unclaimed record (e.g. submitted twice, or from some other source)
+     * falls back to a plain AFTER row so completion never silently drops a photo.
+     * completion_photo_urls itself is kept as a single "primary photo" reference (the first
+     * URL) for backward compatibility, not the full joined list.
+     */
+    private void claimCompletionPhotos(Job job, String completionPhotoUrls) {
+        if (completionPhotoUrls == null || completionPhotoUrls.isBlank()) {
+            return;
+        }
+        String[] urls = completionPhotoUrls.split(",");
+        boolean first = true;
+        for (String rawUrl : urls) {
+            String url = rawUrl.trim();
+            if (url.isEmpty()) continue;
+            if (first) {
+                job.setCompletionPhotoUrls(url);
+                first = false;
+            }
+            JobPhoto photo = jobPhotoRepo.findFirstByUrlAndJobIdIsNull(url)
+                    .orElseGet(() -> JobPhoto.builder()
+                            .url(url)
+                            .photoType(JobPhoto.PhotoType.AFTER)
+                            .build());
+            photo.setJobId(job.getId());
+            jobPhotoRepo.save(photo);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 5c. JOB NOTES (JOB-014) — internal/external notes on a job, mirroring
+    // FaultAssignmentService's fault-note pattern
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Transactional
+    public JobNoteDTO.NoteResponse addJobNote(Long jobId, JobNoteDTO.AddNoteRequest request, Long userId) {
+        findJobOrThrow(jobId);
+        User author = userRepo.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + userId));
+
+        JobNote note = JobNote.builder()
+                .jobId(jobId)
+                .addedBy(author.getId())
+                .addedByName(author.getFullName())
+                .addedByRole(author.getRole() != null ? author.getRole().name() : null)
+                .content(request.getContent())
+                .isInternal(request.isInternal())
+                .build();
+
+        return mapNoteToResponse(jobNoteRepo.save(note));
+    }
+
+    @Transactional(readOnly = true)
+    public List<JobNoteDTO.NoteResponse> getJobNotes(Long jobId, boolean includeInternal) {
+        findJobOrThrow(jobId);
+        List<JobNote> notes = includeInternal
+                ? jobNoteRepo.findByJobId(jobId)
+                : jobNoteRepo.findPublicByJobId(jobId);
+        return notes.stream().map(this::mapNoteToResponse).collect(Collectors.toList());
+    }
+
+    private JobNoteDTO.NoteResponse mapNoteToResponse(JobNote note) {
+        return JobNoteDTO.NoteResponse.builder()
+                .id(note.getId())
+                .jobId(note.getJobId())
+                .content(note.getContent())
+                .isInternal(note.getIsInternal() != null && note.getIsInternal())
+                .authorId(note.getAddedBy())
+                .authorName(note.getAddedByName())
+                .authorRole(note.getAddedByRole())
+                .createdAt(note.getCreatedAt())
+                .build();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // 5d. WORK TIMER (JOB-009) — start/pause/resume, persisted as one row per
+    // worked interval so a pause/resume cycle can be reconstructed and summed
+    // ══════════════════════════════════════════════════════════════════════════
+
+    @Transactional
+    public JobTimerLog startTimer(Long jobId, Long userId) {
+        Job job = findJobOrThrow(jobId);
+        if (job.getStatus() != Job.JobStatus.IN_PROGRESS) {
+            throw new RuntimeException("The work timer can only be started while the job is IN_PROGRESS.");
+        }
+        if (jobTimerLogRepo.findByJobIdAndStoppedAtIsNull(jobId).isPresent()) {
+            throw new RuntimeException("The work timer is already running for this job.");
+        }
+        return jobTimerLogRepo.save(JobTimerLog.builder()
+            .jobId(jobId)
+            .startedAt(LocalDateTime.now())
+            .build());
+    }
+
+    @Transactional
+    public JobTimerLog pauseTimer(Long jobId, Long userId) {
+        findJobOrThrow(jobId);
+        JobTimerLog open = jobTimerLogRepo.findByJobIdAndStoppedAtIsNull(jobId)
+            .orElseThrow(() -> new RuntimeException("There is no running work timer for this job to pause."));
+
+        LocalDateTime now = LocalDateTime.now();
+        open.setStoppedAt(now);
+        open.setDurationSeconds(java.time.Duration.between(open.getStartedAt(), now).getSeconds());
+        return jobTimerLogRepo.save(open);
+    }
+
+    @Transactional
+    public JobTimerLog resumeTimer(Long jobId, Long userId) {
+        findJobOrThrow(jobId);
+        if (jobTimerLogRepo.findByJobIdAndStoppedAtIsNull(jobId).isPresent()) {
+            throw new RuntimeException("The work timer is already running for this job.");
+        }
+        if (jobTimerLogRepo.findByJobId(jobId).isEmpty()) {
+            throw new RuntimeException("The work timer has not been started for this job yet.");
+        }
+        return jobTimerLogRepo.save(JobTimerLog.builder()
+            .jobId(jobId)
+            .startedAt(LocalDateTime.now())
+            .build());
+    }
+
+    @Transactional(readOnly = true)
+    public List<JobTimerDTO.LogResponse> getJobTimerLogs(Long jobId) {
+        findJobOrThrow(jobId);
+        return jobTimerLogRepo.findByJobId(jobId).stream()
+            .map(l -> JobTimerDTO.LogResponse.builder()
+                .id(l.getId())
+                .jobId(l.getJobId())
+                .startedAt(l.getStartedAt())
+                .stoppedAt(l.getStoppedAt())
+                .durationSeconds(l.getDurationSeconds())
+                .build())
+            .collect(Collectors.toList());
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // 5b. MARK ARRIVED — Technician has reached the job site while TRAVELLING
     // ══════════════════════════════════════════════════════════════════════════
@@ -716,10 +905,9 @@ public class JobService {
                 "Cannot log materials for a " + job.getStatus() + " job.");
         }
 
-        // Load real material name
-        String materialName = materialRepo.findById(request.getMaterialId())
-            .map(m -> m.getName())
-            .orElse("Material #" + request.getMaterialId());
+        Material material = materialRepo.findById(request.getMaterialId()).orElse(null);
+        String materialName = material != null
+            ? material.getName() : "Material #" + request.getMaterialId();
 
         MaterialUsage usage = new MaterialUsage();
         usage.setJobId(jobId);
@@ -731,7 +919,47 @@ public class JobService {
         usage.setJustification(request.getJustification());
         usage.setRecordedBy(userId);
 
-        return materialUsageRepo.save(usage);
+        MaterialUsage saved = materialUsageRepo.save(usage);
+
+        // JOB-010 — material usage must move stock, not just record a usage row: decrement
+        // the material's on-hand quantity, leave a stock_transactions audit row (mirroring
+        // StockManagementService.adjustStock's own STOCK_OUT/USAGE pattern), and warn the
+        // job's Team Lead once the material drops to or below its minimum threshold.
+        if (material != null && request.getQuantityUsed() != null) {
+            BigDecimal before = material.getCurrentStock() != null
+                ? material.getCurrentStock() : BigDecimal.ZERO;
+            BigDecimal after = before.subtract(request.getQuantityUsed());
+            material.setCurrentStock(after);
+            materialRepo.save(material);
+
+            StockTransaction tx = StockTransaction.builder()
+                .materialId(material.getId())
+                .materialName(material.getName())
+                .performedBy(userId)
+                .transactionType(StockTransaction.TransactionType.USAGE)
+                .quantity(request.getQuantityUsed())
+                .stockBefore(before)
+                .stockAfter(after)
+                .referenceType(StockTransaction.ReferenceType.JOB)
+                .referenceId(jobId)
+                .reason("Material used on job " + job.getJobNumber())
+                .build();
+            stockTxnRepo.save(tx);
+
+            BigDecimal minThreshold = material.getMinimumThreshold();
+            if (minThreshold != null && after.compareTo(minThreshold) <= 0) {
+                userRepo.findById(job.getTeamLeadId()).ifPresent(tl ->
+                    notificationService.notifyUser(
+                        tl.getId(), tl.getFcmToken(),
+                        Notification.NotificationType.LOW_STOCK_ALERT,
+                        "Low Stock Alert",
+                        "'" + material.getName()
+                            + "' stock is at or below minimum threshold. Please restock.",
+                        material.getId(), "MATERIAL"));
+            }
+        }
+
+        return saved;
     }
 
     // ══════════════════════════════════════════════════════════════════════════

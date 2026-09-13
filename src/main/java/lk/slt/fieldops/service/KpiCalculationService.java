@@ -576,6 +576,13 @@ public class KpiCalculationService {
                                 "Admin not found: "
                                         + adminId));
 
+        // KPI-003/004 — period_year, target_year, target_month, min_jobs_per_day,
+        // target_sla_compliance and target_customer_rating are all NOT NULL with no default
+        // under STRICT_TRANS_TABLES. The last five belong to a separate, not-yet-built
+        // branch-level monthly target sub-feature (see the entity's own field comments) that
+        // this individual technician target has no value for — defaulted rather than left
+        // null, since the schema demands a value from every row regardless of target type.
+        LocalDate today = LocalDate.now();
         KpiTarget target = KpiTarget.builder()
                 .user(technician)
                 .assignedBy(admin)
@@ -587,11 +594,17 @@ public class KpiCalculationService {
                 .period(request.getPeriod())
                 .category(request.getCategory())
                 .dueDate(request.getDueDate())
-                .startDate(LocalDate.now())
+                .startDate(today)
                 .status(KpiDTO.STATUS_ON_TRACK)
                 .isGroupTarget(
                         request.isGroupTarget())
                 .isActive(true)
+                .periodYear(today.getYear())
+                .targetYear(today.getYear())
+                .targetMonth(today.getMonthValue())
+                .minJobsPerDay(0)
+                .targetSlaCompliance(java.math.BigDecimal.ZERO)
+                .targetCustomerRating(java.math.BigDecimal.ZERO)
                 .build();
 
         KpiTarget saved =
@@ -763,11 +776,19 @@ public class KpiCalculationService {
                             .build());
         }
 
-        // Sort by score descending and add rank
-        leaderboard.sort((a, b) ->
-                Double.compare(
-                        b.getOverallScore(),
-                        a.getOverallScore()));
+        // Sort by score descending; a tie is broken by completed job count descending
+        // (KPI-006) rather than left to fall back on repository iteration order.
+        leaderboard.sort((a, b) -> {
+            int byScore = Double.compare(
+                    b.getOverallScore(),
+                    a.getOverallScore());
+            if (byScore != 0) {
+                return byScore;
+            }
+            return Long.compare(
+                    b.getCompletedJobs(),
+                    a.getCompletedJobs());
+        });
 
         for (int i = 0;
              i < leaderboard.size(); i++) {
@@ -851,6 +872,7 @@ public class KpiCalculationService {
         String status =
                 calculateTargetStatus(
                         progress,
+                        target.getStartDate(),
                         target.getDueDate());
 
         return KpiDTO.TargetResponseDTO.builder()
@@ -937,8 +959,16 @@ public class KpiCalculationService {
                 Math.max(0, overall));
     }
 
+    // KpiIntegrationTest.adminAssignsTarget_returns201Active — this used to grade every target
+    // against fixed absolute progress thresholds (>=75 ON_TRACK, >=50 AT_RISK, else BEHIND)
+    // regardless of how much of the target's own window had actually elapsed, so a target
+    // assigned today with 0% progress and three weeks left was reported BEHIND on day one,
+    // identically to one genuinely behind on its last day. Now graded against the progress
+    // expected for the fraction of the start-to-due-date window already elapsed, so "just
+    // assigned" and "behind pace" are no longer indistinguishable.
     private String calculateTargetStatus(
             double progress,
+            LocalDate startDate,
             LocalDate dueDate) {
         if (progress >= 100) {
             return KpiDTO.STATUS_ACHIEVED;
@@ -959,9 +989,24 @@ public class KpiCalculationService {
             return KpiDTO.STATUS_BEHIND;
         }
 
-        if (progress >= 75) {
+        // How far progress should realistically be if it were keeping even pace across the
+        // target's own start-to-due-date window. No startDate on record (pre-existing rows
+        // created before this field was populated) falls back to the old date-blind grading
+        // via a 100%-elapsed assumption, same effective behaviour as before for those rows.
+        double expectedProgress = 100;
+        if (startDate != null) {
+            long totalDays = java.time.temporal.ChronoUnit.DAYS.between(startDate, dueDate);
+            long elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(startDate, LocalDate.now());
+            double fractionElapsed = totalDays > 0
+                    ? Math.min(1.0, Math.max(0.0, elapsedDays / (double) totalDays))
+                    : 1.0;
+            expectedProgress = fractionElapsed * 100;
+        }
+
+        double paceDeficit = expectedProgress - progress;
+        if (paceDeficit <= 10) {
             return KpiDTO.STATUS_ON_TRACK;
-        } else if (progress >= 50) {
+        } else if (paceDeficit <= 30) {
             return KpiDTO.STATUS_AT_RISK;
         } else {
             return KpiDTO.STATUS_BEHIND;
@@ -973,18 +1018,23 @@ public class KpiCalculationService {
         LocalDate end = LocalDate.now();
         LocalDate start;
 
+        // KPI-011 — an unrecognised (or misspelt) period used to silently fall back to the
+        // MONTHLY window, returning a confident 200 with data the caller never asked for and
+        // no indication the filter was ignored.
         switch (period.toUpperCase()) {
-            case "DAILY":
+            case KpiDTO.PERIOD_DAILY:
                 start = end;
                 break;
-            case "WEEKLY":
+            case KpiDTO.PERIOD_WEEKLY:
                 start = end.minusDays(6);
                 break;
-            case "MONTHLY":
+            case KpiDTO.PERIOD_MONTHLY:
                 start = end.withDayOfMonth(1);
                 break;
             default:
-                start = end.withDayOfMonth(1);
+                throw new RuntimeException("Invalid period: " + period + ". Valid: "
+                        + KpiDTO.PERIOD_DAILY + ", " + KpiDTO.PERIOD_WEEKLY + ", "
+                        + KpiDTO.PERIOD_MONTHLY);
         }
 
         return new LocalDate[]{start, end};

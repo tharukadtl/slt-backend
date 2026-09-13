@@ -69,12 +69,11 @@ class JobServiceTest {
     @Mock private FaultHistoryRepository     faultHistoryRepo;
     @Mock private MaterialRequestRepository  materialRequestRepo;
     @Mock private NotificationService        notificationService;
-
-    /**
-     * Not a JobService collaborator — declared so the JOB-010 assertion can state precisely what
-     * "stock decremented" would have to touch if it were implemented.
-     */
+    @Mock private VehicleService             vehicleService;
     @Mock private StockTransactionRepository stockTxnRepo;
+    @Mock private JobPhotoRepository         jobPhotoRepo;
+    @Mock private JobNoteRepository          jobNoteRepo;
+    @Mock private JobTimerLogRepository      jobTimerLogRepo;
 
     private JobService jobService;
 
@@ -86,7 +85,8 @@ class JobServiceTest {
     void setUp() {
         jobService = new JobService(sessionRepo, memberRepo, jobRepo, checkInOutRepo,
             materialUsageRepo, userRepo, materialRepo, faultRepo, faultHistoryRepo,
-            materialRequestRepo, notificationService);
+            materialRequestRepo, notificationService, vehicleService, stockTxnRepo,
+            jobPhotoRepo, jobNoteRepo, jobTimerLogRepo);
 
         User technician = new User();
         technician.setId(TECH_ID);
