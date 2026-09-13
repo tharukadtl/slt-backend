@@ -48,14 +48,20 @@ jobs:
         if: always()
         run: ./mvnw jacoco:report
 
-      # Upload both the coverage report and the raw Surefire XML so they're
-      # downloadable from the run regardless of pass/fail.
-      - name: Upload test & coverage artifacts
+      # Two separate artifacts (raw test results vs. coverage) so each is
+      # independently downloadable from the run regardless of pass/fail.
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-and-coverage-reports
-          path: |
-            target/surefire-reports/*.xml
-            target/site/jacoco/
+          name: surefire-test-results
+          path: target/surefire-reports/*.xml
+          retention-days: 30
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-coverage-report
+          path: target/site/jacoco/
           retention-days: 30
