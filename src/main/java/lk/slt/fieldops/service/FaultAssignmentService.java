@@ -189,6 +189,14 @@ public class FaultAssignmentService {
                             + " has been assigned to "
                             + workGroup.getName(),
                     "FAULT_ASSIGNED");
+
+            // NOTIF-001 — the WebSocket push above is transient only; a Team Lead not holding
+            // an open socket at this instant was never told, and nothing survived for the
+            // in-app list. notifyFaultAssigned already exists and works for this exact event
+            // (see NotificationServiceTest) — it simply had no caller here.
+            notificationService.notifyFaultAssigned(
+                    teamLead.getId(), teamLead.getFcmToken(),
+                    fault.getFaultNumber(), fault.getId());
         }
 
         if (req.isNotifyCustomer()

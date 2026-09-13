@@ -13,6 +13,9 @@ import lk.slt.fieldops.service.FaultService;
 import lk.slt.fieldops.service.LocationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -40,25 +43,49 @@ public class FaultController {
     // database query (FaultRepository.findByOptionalStatusAndCategory).
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ResponseEntity<List<FaultDTO>> getAll(
+    public ResponseEntity<?> getAll(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
             @AuthenticationPrincipal Long userId) {
-        log.info("GET /api/faults status={} category={}", status, category);
+        log.info("GET /api/faults status={} category={} page={} size={}", status, category, page, size);
         boolean isSuperAdmin = SecurityContextHolder.getContext().getAuthentication()
             .getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+
+        List<FaultDTO> all;
         if (isSuperAdmin) {
-            return ResponseEntity.ok(faultService.getAllFaults(status, category));
+            all = faultService.getAllFaults(status, category);
+        } else {
+            // RES-023 — OPMC Admin sees only their own OPMC's faults. opmcId is
+            // derived from the caller's own user record, never a client-supplied
+            // parameter, so it can't be overridden the way a bare query param could.
+            Long opmcId = userRepo.findById(userId).map(User::getOpmcId).orElse(null);
+            all = opmcId == null ? List.of() : faultService.getAllFaultsForOpmc(opmcId, status, category);
         }
-        // RES-023 — OPMC Admin sees only their own OPMC's faults. opmcId is
-        // derived from the caller's own user record, never a client-supplied
-        // parameter, so it can't be overridden the way a bare query param could.
-        Long opmcId = userRepo.findById(userId).map(User::getOpmcId).orElse(null);
-        if (opmcId == null) {
-            return ResponseEntity.ok(List.of());
+
+        // API-004 — page/size are opt-in: a caller that supplies neither gets the same bare
+        // array every existing caller already relies on (FaultSecurityTest, SqlInjectionSecurityTest,
+        // SltFaultsCollectionTest#filterByCategoryAndStatus all assert this shape); a caller that
+        // supplies either gets a real Page envelope (content + totalElements) instead of that
+        // param being silently discarded as unbound and the full table returned regardless.
+        if (page == null && size == null) {
+            return ResponseEntity.ok(all);
         }
-        return ResponseEntity.ok(faultService.getAllFaultsForOpmc(opmcId, status, category));
+        return ResponseEntity.ok(paginate(all, page != null ? page : 0, size != null ? size : 20));
+    }
+
+    // Slices the already-filtered list rather than pushing paging into the repository layer
+    // (getAllFaults/getAllFaultsForOpmc are also called by other, non-paginated callers) —
+    // the response is now a genuine Page envelope with a real totalElements/content, even
+    // though the underlying query itself isn't yet page-bounded at the DB level.
+    private Page<FaultDTO> paginate(List<FaultDTO> all, int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.max(size, 1);
+        int from = Math.min(safePage * safeSize, all.size());
+        int to = Math.min(from + safeSize, all.size());
+        return new PageImpl<>(all.subList(from, to), PageRequest.of(safePage, safeSize), all.size());
     }
 
     // ─── GET /api/faults/my — Team Lead: faults assigned to me ───────────────

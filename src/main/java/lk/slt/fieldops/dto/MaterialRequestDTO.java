@@ -63,6 +63,17 @@ public class MaterialRequestDTO {
         private String notes;
     }
 
+    // ─── Bulk Approve Request (RES-012) ───────────────────
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class BulkApproveRequest {
+
+        @NotEmpty(message = "At least one request id is required")
+        private List<Long> ids;
+    }
+
     // ─── Approve Request ──────────────────────────────────
     @Data
     @Builder

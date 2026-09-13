@@ -124,7 +124,7 @@ public class AuthService {
     // ══════════════════════════════════════════════════════════════════════════
 
     @Transactional
-    public void sendOtp(String phoneNumber) {
+    public Long sendOtp(String phoneNumber) {
         findUserByPhone(phoneNumber)
                 .orElseThrow(() -> new RuntimeException("This phone number is not registered in the system."));
 
@@ -150,7 +150,7 @@ public class AuthService {
                 .purpose(OtpRecord.OtpPurpose.CLIENT_LOGIN)
                 .expiresAt(LocalDateTime.now().plusMinutes(otpExpiryMinutes))
                 .build();
-        otpRepo.save(r);
+        OtpRecord saved = otpRepo.save(r);
 
         if (smsEnabled) {
             // TODO: Integrate SMS gateway (Twilio, Dialog, etc.)
@@ -160,6 +160,10 @@ public class AuthService {
             log.warning("  DEV OTP for " + phoneNumber + " : " + code);
             log.warning("========================================");
         }
+
+        // AUTH-002 — the caller needs a way to correlate this specific OTP request/attempt
+        // rather than the API being keyed by phone number alone.
+        return saved.getId();
     }
 
     // ══════════════════════════════════════════════════════════════════════════

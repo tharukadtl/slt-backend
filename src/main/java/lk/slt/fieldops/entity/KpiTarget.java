@@ -110,6 +110,13 @@ public class KpiTarget {
     @Column(name = "kpi_branch_id")
     private Long monthlyTargetBranchId;
 
+    // KPI-003 — the calendar year this target's period falls in. Applies to every target
+    // (not just the branch-monthly sub-feature below), but was never mapped at all, so
+    // KpiCalculationService.assignTarget could never populate it — NOT NULL with no default
+    // under STRICT_TRANS_TABLES, so every INSERT failed regardless of payload.
+    @Column(name = "period_year", nullable = false)
+    private Integer periodYear;
+
     @Column(name = "target_year")
     private Integer targetYear;
 

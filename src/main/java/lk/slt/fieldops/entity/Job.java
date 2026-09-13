@@ -186,9 +186,18 @@ public class Job {
     @Column(name = "signature_flagged_at")
     private LocalDateTime signatureFlaggedAt;
 
-    // Comma-separated after-service photo URLs, required to complete a job.
+    // JOB-006/015 — kept for backward compatibility as a single "primary photo" reference
+    // (set from the first claimed URL); the normalized, one-row-per-photo record now lives
+    // in job_photos (see the photos collection below), not this column.
     @Column(name = "completion_photo_urls", columnDefinition = "TEXT")
     private String completionPhotoUrls;
+
+    // Read-only from this side — JobPhoto.jobId (its own @Column) is what Hibernate actually
+    // writes to; this is purely a convenience view for reads (e.g. GET /api/jobs/{id}'s JSON).
+    @OneToMany(fetch = FetchType.LAZY)
+    @JoinColumn(name = "job_id", insertable = false, updatable = false)
+    @OrderBy("uploadedAt ASC")
+    private java.util.List<JobPhoto> photos;
 
     @Column(name = "created_by")
     private Long createdBy;
@@ -256,6 +265,7 @@ public class Job {
     public Boolean        getNeedsTeamLeadReview()   { return needsTeamLeadReview; }
     public LocalDateTime  getSignatureFlaggedAt()     { return signatureFlaggedAt; }
     public String      getCompletionPhotoUrls() { return completionPhotoUrls; }
+    public java.util.List<JobPhoto> getPhotos() { return photos; }
     public Long        getCreatedBy()       { return createdBy; }
     public Long        getUpdatedBy()       { return updatedBy; }
 

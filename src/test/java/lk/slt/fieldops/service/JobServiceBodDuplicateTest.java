@@ -48,6 +48,7 @@ class JobServiceBodDuplicateTest {
     @Mock private MaterialRepository         materialRepo;
     @Mock private FaultRepository            faultRepo;
     @Mock private NotificationService        notificationService;
+    @Mock private VehicleService             vehicleService;
 
     @InjectMocks private JobService jobService;
 
