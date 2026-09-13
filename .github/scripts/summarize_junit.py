@@ -11,9 +11,16 @@ Usage:
 
 --group splits the overall summary into additional labeled sections, one per
 group, matching each <testsuite> to a group by its fully-qualified class name
-(the suite's "name" attribute) starting with one of the group's package
-prefixes. Groups are reported in the order given. A suite matching no group
-still counts toward the overall total at the top but not toward any section.
+(the suite's "name" attribute) starting with one of the group's entries.
+Groups are reported in the order given, and a suite is claimed by the first
+group it matches -- so a more specific entry (e.g. an exact class's FQCN,
+with no trailing dot) must be listed in a group checked before a broader
+package-prefix entry that would otherwise also match it. When --group is
+used at all, any suite matching none of them is automatically collected into
+a trailing "Other" section -- this is what keeps every category subtotal
+summing back to the overall total at the top, including for any test class
+added later in a package no --group entry yet covers, not just today's known
+stragglers.
 """
 import argparse
 import glob
@@ -104,6 +111,7 @@ def main():
     overall_total = overall_failures = overall_errors = overall_skipped = 0
     overall_failing_names = []
     group_totals = [[0, 0, 0, 0, []] for _ in groups]
+    other_total = [0, 0, 0, 0, []]
 
     for path in files:
         try:
@@ -128,6 +136,13 @@ def main():
                     g[3] += skipped
                     g[4].extend(failing_names)
                     break
+            else:
+                if groups:
+                    other_total[0] += total
+                    other_total[1] += failures
+                    other_total[2] += errors
+                    other_total[3] += skipped
+                    other_total[4].extend(failing_names)
 
     lines.extend(
         summary_block(
@@ -145,6 +160,12 @@ def main():
     ):
         lines.extend(
             summary_block(f"### {label}", total, failures, errors, skipped, failing_names)
+        )
+
+    if groups:
+        total, failures, errors, skipped, failing_names = other_total
+        lines.extend(
+            summary_block("### Other", total, failures, errors, skipped, failing_names)
         )
 
     write(lines)
