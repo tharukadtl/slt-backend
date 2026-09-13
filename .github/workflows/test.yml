@@ -36,8 +36,20 @@ jobs:
             --group "Security Tests=lk.slt.fieldops.security."
 
       # JaCoCo's `report` execution (pom.xml, bound to the test phase) already
-      # wrote target/site/jacoco/ during `mvn test` above -- upload both that
-      # and the raw Surefire XML so they're downloadable from the run.
+      # wrote target/site/jacoco/ during `mvn test` above when every test
+      # passed. But Surefire fails the build the instant a test fails, which
+      # aborts the reactor before that same-phase report execution gets to
+      # run -- so on a red build target/site/jacoco/ would otherwise never
+      # exist. `jacoco:report` run bare doesn't re-execute tests: it just
+      # reads the target/jacoco.exec this JVM already wrote and the classes
+      # `mvn test` already compiled, so this is a real no-op when the report
+      # above already ran, and the only way to get coverage when tests fail.
+      - name: Generate coverage report
+        if: always()
+        run: ./mvnw jacoco:report
+
+      # Upload both the coverage report and the raw Surefire XML so they're
+      # downloadable from the run regardless of pass/fail.
       - name: Upload test & coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4
