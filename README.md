@@ -53,3 +53,5 @@ one with `openssl rand -hex 32` or similar, it doesn't need to be memorable.
 **Never commit a real secret value** into `application.yml` or any tracked
 file — `application-local.yml` and `.env` are git-ignored for exactly this
 reason.
+
+<!-- 2026-09-14: trivial edit to exercise Test -> Deploy to Production (workflow_run). -->
