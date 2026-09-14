@@ -1,0 +1,138 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# docker-compose.yml — fieldops + ai-module + frontend-admin, one shared MySQL
+# ═══════════════════════════════════════════════════════════════════════════
+# Assumes the sibling-repo layout this whole project already uses on disk:
+#   slt/
+#     fieldops/         <- this file lives here; `docker compose` run from here
+#     slt-ai-module/
+#     frontend-admin/
+#
+# Real credentials come from a gitignored .env (see .env.example for the
+# template -- copy it to .env and fill in real values before running this).
+#
+# Usage:
+#   docker compose build
+#   docker compose up -d
+#   docker compose ps            # wait for all four to report healthy
+#   docker compose down          # stop (add -v to also drop the mysql volume)
+# ═══════════════════════════════════════════════════════════════════════════
+
+networks:
+  slt-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+    driver: local
+
+services:
+
+  # ─── MySQL 8.0 ──────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: fieldops-mysql
+    restart: unless-stopped
+    networks:
+      - slt-network
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE:      ${DB_NAME}
+      MYSQL_USER:          ${DB_USER}
+      MYSQL_PASSWORD:      ${DB_PASSWORD}
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost",
+             "-u", "${DB_USER}", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ─── fieldops (Spring Boot) ─────────────────────────────────────────────
+  fieldops:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fieldops
+    restart: unless-stopped
+    networks:
+      - slt-network
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Colombo
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      AI_MODULE_URL: http://ai-module:5000
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ─── ai-module (Flask) ──────────────────────────────────────────────────
+  ai-module:
+    build:
+      context: ../slt-ai-module
+      dockerfile: Dockerfile
+    container_name: ai-module
+    restart: unless-stopped
+    networks:
+      - slt-network
+    ports:
+      - "5000:5000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      SECRET_KEY: ${AI_SECRET_KEY}
+      SPRING_API_URL: http://fieldops:8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/ai/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ─── frontend-admin (React, built + served via nginx) ──────────────────
+  frontend-admin:
+    build:
+      context: ../frontend-admin
+      dockerfile: Dockerfile
+      args:
+        # Baked into the CRA build at image-build time (see that Dockerfile's own
+        # comment) -- must resolve from the BROWSER, not from inside the docker
+        # network, so this points at fieldops's host-published port, not the
+        # internal service hostname.
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8080/api}
+        REACT_APP_AI_URL: ${REACT_APP_AI_URL:-http://localhost:5000}
+    container_name: frontend-admin
+    restart: unless-stopped
+    networks:
+      - slt-network
+    ports:
+      - "80:80"
+    depends_on:
+      fieldops:
+        condition: service_healthy
+    # No healthcheck override here -- the image's own Dockerfile HEALTHCHECK is
+    # authoritative. (A compose-level override previously duplicated here, still
+    # pointed at "localhost", silently took precedence over the Dockerfile's fix
+    # to 127.0.0.1 -- confirmed directly via `docker inspect`, not assumed: the
+    # container kept reporting unhealthy with a genuinely fixed image running,
+    # until this duplicate override was found and removed.)
