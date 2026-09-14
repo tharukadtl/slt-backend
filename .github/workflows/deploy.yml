@@ -1,0 +1,34 @@
+name: Deploy to Production
+
+on:
+  workflow_run:
+    workflows: ["Test"]
+    types: [completed]
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.GCP_VM_HOST }}
+          username: ${{ secrets.GCP_VM_USER }}
+          key: ${{ secrets.GCP_VM_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.GCP_VM_DEPLOY_PATH }}
+            echo "Pulling latest fieldops..."
+            git pull origin master
+            echo "Pulling latest slt-ai-module..."
+            cd ../slt-ai-module && git pull origin master
+            echo "Pulling latest frontend-admin..."
+            cd ../frontend-admin && git pull origin master
+            cd ${{ secrets.GCP_VM_DEPLOY_PATH }}
+            echo "Rebuilding and restarting..."
+            sudo docker compose up -d --build
+            echo "Waiting for health checks..."
+            sleep 15
+            sudo docker compose ps
