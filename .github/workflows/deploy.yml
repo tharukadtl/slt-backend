@@ -28,7 +28,7 @@ jobs:
             cd ../frontend-admin && git pull origin master
             cd ${{ secrets.GCP_VM_DEPLOY_PATH }}
             echo "Rebuilding and restarting..."
-            sudo docker compose up -d --build
+            docker compose up -d --build
             echo "Waiting for health checks..."
             sleep 15
-            sudo docker compose ps
+            docker compose ps
