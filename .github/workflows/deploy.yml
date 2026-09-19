@@ -5,12 +5,35 @@ on:
     workflows: ["Test"]
     types: [completed]
     branches: [master]
+  # Fired by frontend-admin's and slt-ai-module's own Test workflows (their notify-deploy job)
+  # via a repository_dispatch POST once their Test job succeeds on master -- see those repos'
+  # .github/workflows/test.yml. There is no equivalent workflow_run trigger for "a workflow in
+  # another repo completed": workflow_run only observes workflows in the SAME repo, so a
+  # cross-repo signal has to be pushed in explicitly like this instead.
+  repository_dispatch:
+    types: [external-test-passed]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    # Two independent ways in: fieldops's own Test workflow finishing successfully on master
+    # (workflow_run), or an already-green Test run on master in frontend-admin/slt-ai-module
+    # telling us so directly (repository_dispatch -- there is no "conclusion" to check here,
+    # since the sender only dispatches this event from behind its own `if: success()` gate).
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'repository_dispatch'
     steps:
+      - name: Log trigger source
+        run: |
+          echo "Triggered by: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "Source repo: ${{ github.event.client_payload.source_repo }}"
+            echo "Source sha:  ${{ github.event.client_payload.sha }}"
+          else
+            echo "Source workflow run: ${{ github.event.workflow_run.html_url }}"
+          fi
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.5
         with:
