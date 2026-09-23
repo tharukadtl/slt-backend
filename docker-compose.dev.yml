@@ -1,20 +1,26 @@
 # ═══════════════════════════════════════════════════════════════════════════
-# docker-compose.yml — fieldops + ai-module + frontend-admin, one shared MySQL
+# docker-compose.dev.yml — local development variant: builds all three app
+# images from source instead of pulling them from ghcr.io.
 # ═══════════════════════════════════════════════════════════════════════════
-# Deploys the pre-built images CI already tested and pushed to GHCR (see each
-# repo's .github/workflows/test.yml build-and-push job) -- this file never
-# builds from source. For local development that needs to build straight from
-# a working tree, use docker-compose.dev.yml instead.
+# docker-compose.yml (no suffix) now deploys the same images CI builds and
+# pushes to ghcr.io/tharukadtl/* (`image:`, pulled via `docker compose pull`).
+# This file is the pre-registry original, kept so local development can still
+# build straight from a working tree without pushing/pulling anything.
+#
+# Assumes the sibling-repo layout this whole project already uses on disk:
+#   slt/
+#     fieldops/         <- this file lives here; `docker compose` run from here
+#     slt-ai-module/
+#     frontend-admin/
 #
 # Real credentials come from a gitignored .env (see .env.example for the
 # template -- copy it to .env and fill in real values before running this).
 #
 # Usage:
-#   docker login ghcr.io         # once, with a PAT that has read:packages
-#   docker compose pull
-#   docker compose up -d
-#   docker compose ps            # wait for all four to report healthy
-#   docker compose down          # stop (add -v to also drop the mysql volume)
+#   docker compose -f docker-compose.dev.yml build
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml ps     # wait for all four to report healthy
+#   docker compose -f docker-compose.dev.yml down   # stop (add -v to also drop the mysql volume)
 # ═══════════════════════════════════════════════════════════════════════════
 
 networks:
@@ -55,7 +61,9 @@ services:
 
   # ─── fieldops (Spring Boot) ─────────────────────────────────────────────
   fieldops:
-    image: ghcr.io/tharukadtl/slt-backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: fieldops
     restart: unless-stopped
     networks:
@@ -80,7 +88,9 @@ services:
 
   # ─── ai-module (Flask) ──────────────────────────────────────────────────
   ai-module:
-    image: ghcr.io/tharukadtl/slt-ai-module:latest
+    build:
+      context: ../slt-ai-module
+      dockerfile: Dockerfile
     container_name: ai-module
     restart: unless-stopped
     networks:
@@ -106,12 +116,17 @@ services:
       start_period: 90s
 
   # ─── frontend-admin (React, built + served via nginx) ──────────────────
-  # REACT_APP_API_URL / REACT_APP_AI_URL are baked into this image at CI build
-  # time now (frontend-admin's build-and-push job), not here -- see that repo's
-  # .github/workflows/test.yml for the PROD_REACT_APP_API_URL/PROD_REACT_APP_AI_URL
-  # secrets that control what's actually baked in.
   frontend-admin:
-    image: ghcr.io/tharukadtl/frontend-admin:latest
+    build:
+      context: ../frontend-admin
+      dockerfile: Dockerfile
+      args:
+        # Baked into the CRA build at image-build time (see that Dockerfile's own
+        # comment) -- must resolve from the BROWSER, not from inside the docker
+        # network, so this points at fieldops's host-published port, not the
+        # internal service hostname.
+        REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8080/api}
+        REACT_APP_AI_URL: ${REACT_APP_AI_URL:-http://localhost:5000}
     container_name: frontend-admin
     restart: unless-stopped
     networks:

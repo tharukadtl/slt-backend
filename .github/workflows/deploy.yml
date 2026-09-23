@@ -43,15 +43,13 @@ jobs:
           script: |
             set -e
             cd ${{ secrets.GCP_VM_DEPLOY_PATH }}
-            echo "Pulling latest fieldops..."
             git pull origin master
-            echo "Pulling latest slt-ai-module..."
-            cd ../slt-ai-module && git pull origin master
-            echo "Pulling latest frontend-admin..."
-            cd ../frontend-admin && git pull origin master
-            cd ${{ secrets.GCP_VM_DEPLOY_PATH }}
-            echo "Rebuilding and restarting..."
-            docker compose up -d --build
+            echo "Logging in to GitHub Container Registry..."
+            echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u tharukadtl --password-stdin
+            echo "Pulling latest images..."
+            docker compose pull
+            echo "Restarting with the pulled images..."
+            docker compose up -d
             echo "Waiting for health checks..."
             sleep 15
             docker compose ps
